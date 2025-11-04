@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DBSTargetLocatorWidgetUI</class>
+ <widget class="QWidget" name="DBSTargetLocatorWidgetUI">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="qMRMLNodeComboBox" name="inputMarkupSelector" native="true">
+     <property name="toolTip">
+      <string>Select input markup node</string>
+     </property>
+     <property name="nodeTypes" stdset="0">
+      <stringlist>
+       <string>vtkMRMLMarkupsFiducialNode</string>
+      </stringlist>
+     </property>
+     <property name="selectNodeUponCreation" stdset="0">
+      <bool>true</bool>
+     </property>
+     <property name="addEnabled" stdset="0">
+      <bool>true</bool>
+     </property>
+     <property name="removeEnabled" stdset="0">
+      <bool>true</bool>
+     </property>
+     <property name="showHidden" stdset="0">
+      <bool>false</bool>
+     </property>
+     <property name="showChildNodeTypes" stdset="0">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkSliderWidget" name="opacitySliderWidget" native="true">
+     <property name="toolTip">
+      <string>Set opacity of the sphere model</string>
+     </property>
+     <property name="minimum" stdset="0">
+      <double>0.000000000000000</double>
+     </property>
+     <property name="maximum" stdset="0">
+      <double>1.000000000000000</double>
+     </property>
+     <property name="singleStep" stdset="0">
+      <double>0.100000000000000</double>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="autoUpdateCheckBox">
+     <property name="toolTip">
+      <string>Automatically recompute when fiducials are changed</string>
+     </property>
+     <property name="text">
+      <string>Auto Update</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkPathLineEdit" name="outputLineEdit" native="true">
+     <property name="toolTip">
+      <string>Choose export folder for sphere model</string>
+     </property>
+     <property name="filters" stdset="0">
+      <stringlist>
+       <string>All (*)</string>
+      </stringlist>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="applyButton">
+     <property name="text">
+      <string>Apply</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="exportDataButton">
+     <property name="text">
+      <string>Export Sphere</string>
+     </property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qmrmlnodecombobox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkSliderWidget</class>
+   <extends>QWidget</extends>
+   <header>ctksliderwidget.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkpathlineedit.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
