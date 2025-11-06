@@ -12,83 +12,133 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="qMRMLNodeComboBox" name="inputMarkupSelector" native="true">
-     <property name="toolTip">
-      <string>Select input markup node</string>
-     </property>
-     <property name="nodeTypes" stdset="0">
-      <stringlist>
-       <string>vtkMRMLMarkupsFiducialNode</string>
-      </stringlist>
-     </property>
-     <property name="selectNodeUponCreation" stdset="0">
-      <bool>true</bool>
-     </property>
-     <property name="addEnabled" stdset="0">
-      <bool>true</bool>
-     </property>
-     <property name="removeEnabled" stdset="0">
-      <bool>true</bool>
-     </property>
-     <property name="showHidden" stdset="0">
-      <bool>false</bool>
-     </property>
-     <property name="showChildNodeTypes" stdset="0">
-      <bool>false</bool>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="ctkSliderWidget" name="opacitySliderWidget" native="true">
-     <property name="toolTip">
-      <string>Set opacity of the sphere model</string>
-     </property>
-     <property name="minimum" stdset="0">
-      <double>0.000000000000000</double>
-     </property>
-     <property name="maximum" stdset="0">
-      <double>1.000000000000000</double>
-     </property>
-     <property name="singleStep" stdset="0">
-      <double>0.100000000000000</double>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QCheckBox" name="autoUpdateCheckBox">
-     <property name="toolTip">
-      <string>Automatically recompute when fiducials are changed</string>
-     </property>
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
      <property name="text">
-      <string>Auto Update</string>
+      <string>Inputs</string>
      </property>
+     <layout class="QFormLayout" name="inputsFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelAnatomical">
+        <property name="text">
+         <string>Anatomical Volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="qMRMLNodeComboBox" name="inputAnatomicalSelector">
+        <property name="toolTip">
+         <string>Select the T1w anatomical volume</string>
+        </property>
+        <property name="nodeTypes" stdset="0">
+         <stringlist>
+          <string>vtkMRMLScalarVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showHidden" stdset="0">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled" stdset="0">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled" stdset="0">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="labelFunctional">
+        <property name="text">
+         <string>Functional Volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="qMRMLNodeComboBox" name="inputFunctionalSelector">
+        <property name="toolTip">
+         <string>Select the BOLD fMRI volume</string>
+        </property>
+        <property name="nodeTypes" stdset="0">
+         <stringlist>
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLMultiVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showHidden" stdset="0">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled" stdset="0">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled" stdset="0">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
-    <widget class="ctkPathLineEdit" name="outputLineEdit" native="true">
-     <property name="toolTip">
-      <string>Choose export folder for sphere model</string>
+    <widget class="ctkCollapsibleButton" name="outputsCollapsibleButton">
+     <property name="text">
+      <string>Outputs</string>
      </property>
-     <property name="filters" stdset="0">
-      <stringlist>
-       <string>All (*)</string>
-      </stringlist>
-     </property>
+     <layout class="QFormLayout" name="outputsFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="labelOutput">
+        <property name="text">
+         <string>Output Volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="qMRMLNodeComboBox" name="outputVolumeSelector">
+        <property name="toolTip">
+         <string>Select or create the output target map volume</string>
+        </property>
+        <property name="nodeTypes" stdset="0">
+         <stringlist>
+          <string>vtkMRMLScalarVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showHidden" stdset="0">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled" stdset="0">
+         <bool>true</bool>
+        </property>
+        <property name="removeEnabled" stdset="0">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
     <widget class="QPushButton" name="applyButton">
+     <property name="toolTip">
+      <string>Run the fMRI analysis</string>
+     </property>
      <property name="text">
       <string>Apply</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="exportDataButton">
-     <property name="text">
-      <string>Export Sphere</string>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
      </property>
-    </widget>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+     <property name="sizeType">
+      <enum>QSizePolicy::Expanding</enum>
+     </property>
+    </spacer>
    </item>
   </layout>
  </widget>
@@ -99,14 +149,9 @@
    <header>qmrmlnodecombobox.h</header>
   </customwidget>
   <customwidget>
-   <class>ctkSliderWidget</class>
+   <class>ctkCollapsibleButton</class>
    <extends>QWidget</extends>
-   <header>ctksliderwidget.h</header>
-  </customwidget>
-  <customwidget>
-   <class>ctkPathLineEdit</class>
-   <extends>QWidget</extends>
-   <header>ctkpathlineedit.h</header>
+   <header>ctkcollapsiblebutton.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

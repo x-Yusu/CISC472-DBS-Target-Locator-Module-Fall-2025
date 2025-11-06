@@ -1,7 +1,8 @@
-# The following is an example module template taken from PerkLabBootcamp Example file:
+# The following was derived from an example module template from a PerkLabBootcamp slicer scripted module example file:
 # https://github.com/PerkLab/PerkLabBootcamp/blob/master/Examples/CampTutorial2/CampTutorial2.py
 
-# It is to be used as a base to expand on, and potentially completely replace, as we work on the project code
+# This template was used as a base to be expanded on, and will potentially be completely replaced
+# as we work on the project code
 
 """
 Guide for importing module to 3DSlicer:
@@ -13,13 +14,12 @@ Module can then be searched as "DBS Target Locator" or found in module dropdown 
 
 import os
 import logging
-import vtk, qt, ctk, slicer
 import numpy as np
+import vtk
+import slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
 
-from slicer import qMRMLWidget
-import qt
 
 #
 # DBS Target Locator Module
@@ -40,11 +40,14 @@ class DBSTargetLocator(ScriptedLoadableModule):
             "Gabriel Burrows, Leopold Ehrlich, Keiichiro Hayashi, Robert He, Amanda Zhu (Queen's University)"
         ]
         self.parent.helpText = """
-    Automated localization of candidate electrode sites for deep brain stimulation in depression.
-    This tool uses patient-specific fMRI data to highlight regions with abnormal activity that could
-    inform DBS planning.
-    """
-        self.parent.acknowledgementText = "Developed for group project in CISC 472 at Queen's University."
+        Automated localization of candidate electrode sites for deep brain stimulation in depression.
+        This tool uses patient-specific fMRI data to highlight regions with abnormal activity that could
+        inform DBS planning.
+        """
+        self.parent.acknowledgementText = ("Developed for group project in CISC 472 at Queen's University. "
+                                           "Contains sample data from The Transdiagnostic Connectome Project at"
+                                           "https://openneuro.org/datasets/ds005237")
+
 
         # Additional initialization step after application startup is complete
         slicer.app.connect("startupCompleted()", registerSampleData)
@@ -54,39 +57,50 @@ class DBSTargetLocator(ScriptedLoadableModule):
 # Register sample data sets in DBS Target Locator module
 #
 
-
 def registerSampleData():
+    """
+    Register OpenNeuro MRI and fMRI datasets (with JSON metadata)
+    for subject NDARINVAG023WG3 from ds005237.
+    """
     import SampleData
+    import os
+
     iconsPath = os.path.join(os.path.dirname(__file__), "Resources/Icons")
 
-    # To ensure that the source code repository remains small (can be downloaded and installed quickly)
-    # it is recommended to store data sets that are larger than a few MB in a Github release.
+    # Anatomical MRI (T1w)
+    # Load the anatomical T1-weighted MRI scan with its metadata
+    anat_nii = "https://s3.amazonaws.com/openneuro.org/ds005237/sub-NDARINVAG023WG3/anat/sub-NDARINVAG023WG3_run-01_T1w.nii.gz"
+    anat_json = "https://s3.amazonaws.com/openneuro.org/ds005237/sub-NDARINVAG023WG3/anat/sub-NDARINVAG023WG3_run-01_T1w.json"
 
     SampleData.SampleDataLogic.registerCustomSampleDataSource(
-        # Category and sample name displayed in Sample Data module
-        category="DBSTargetLocator",
-        sampleName="DBSTargetLocator1",
-        # Thumbnail should have size of approximately 260x280 pixels and stored in Resources/Icons folder.
-        # It can be created by Screen Capture module, "Capture all views" option enabled, "Number of images" set to "Single".
-        thumbnailFileName=os.path.join(iconsPath, "DBSTargetLocator1.png"),
-        # Download URL and target file name
-        uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-        fileNames="DBSTargetLocator1.nrrd",
-        # Checksum to ensure file integrity. Can be computed by this command:
-        #  import hashlib; print(hashlib.sha256(open(filename, "rb").read()).hexdigest())
-        checksums="SHA256:998cb522173839c78657f4bc0ea907cea09fd04e44601f17c82ea27927937b95",
-        # This node name will be used when the data set is loaded
-        nodeNames="DBSTargetLocator1"
+        category="OpenNeuro ds005237",
+        sampleName="sub-NDARINVAG023WG3_T1w (Anatomical MRI)",
+        thumbnailFileName=os.path.join(iconsPath, "OpenNeuroAnat.png"),
+        uris=[anat_nii, anat_json],
+        fileNames=[
+            "sub-NDARINVAG023WG3_run-01_T1w.nii.gz",
+            "sub-NDARINVAG023WG3_run-01_T1w.json"
+        ],
+        nodeNames=["sub-NDARINVAG023WG3_T1w", None],  # only load the NIfTI file
+        checksums=None
     )
 
+    # Functional MRI (BOLD)
+    # Load the functional BOLD fMRI scan with its metadata
+    func_nii = "https://s3.amazonaws.com/openneuro.org/ds005237/sub-NDARINVAG023WG3/func/sub-NDARINVAG023WG3_task-restAP_run-01_bold.nii.gz"
+    func_json = "https://s3.amazonaws.com/openneuro.org/ds005237/sub-NDARINVAG023WG3/func/sub-NDARINVAG023WG3_task-restAP_run-01_bold.json"
+
     SampleData.SampleDataLogic.registerCustomSampleDataSource(
-        category="DBSTargetLocator",
-        sampleName="DBSTargetLocator2",
-        thumbnailFileName=os.path.join(iconsPath, "DBSTargetLocator2.png"),
-        uris="https://github.com/Slicer/SlicerTestingData/releases/download/SHA256/1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-        fileNames="DBSTargetLocator2.nrrd",
-        checksums="SHA256:1a64f3f422eb3d1c9b093d1a18da354b13bcf307907c66317e2463ee530b7a97",
-        nodeNames="DBSTargetLocator2"
+        category="OpenNeuro ds005237",
+        sampleName="sub-NDARINVAG023WG3_task-restAP (fMRI)",
+        thumbnailFileName=os.path.join(iconsPath, "OpenNeurofMRI.png"),
+        uris=[func_nii, func_json],
+        fileNames=[
+            "sub-NDARINVAG023WG3_task-restAP_run-01_bold.nii.gz",
+            "sub-NDARINVAG023WG3_task-restAP_run-01_bold.json"
+        ],
+        nodeNames=["sub-NDARINVAG023WG3_task-restAP_bold", None],
+        checksums=None
     )
 
 #
@@ -94,17 +108,27 @@ def registerSampleData():
 #
 
 class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
+    """
+    The user interface for the DBS Target Locator module.
+    This class handles all the UI elements and user interactions.
+    """
 
     def __init__(self, parent=None):
-        """Called when the user opens the module the first time and the widget is initialized."""
+        """
+        Called when the user opens the module the first time and the widget is initialized.
+        Sets up the basic properties we'll need throughout the widget's lifecycle.
+        """
         ScriptedLoadableModuleWidget.__init__(self, parent)
-        VTKObservationMixin.__init__(self) # needed for parameter node observation
+        VTKObservationMixin.__init__(self)  # needed for parameter node observation
         self.logic = None
         self._parameterNode = None
         self._updatingGUIFromParameterNode = False
 
     def setup(self):
-        """Called when the user opens the module the first time and the widget is initialized."""
+        """
+        Called when the user opens the module the first time and the widget is initialized.
+        This is where we build the entire user interface and connect all the buttons and controls.
+        """
         ScriptedLoadableModuleWidget.setup(self)
 
         # Load widget from .ui file (created by Qt Designer).
@@ -113,311 +137,481 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.layout.addWidget(uiWidget)
         self.ui = slicer.util.childWidgetVariables(uiWidget)
 
-        # Set scene in MRML widgets. Make sure that in Qt designer the top-level qMRMLWidget's
-        # "mrmlSceneChanged(vtkMRMLScene*)" signal in is connected to each MRML widget's.
-        # "setMRMLScene(vtkMRMLScene*)" slot.
-        self.ui.inputMarkupSelector.setMRMLScene(slicer.mrmlScene)
+        # Set scene in MRML widgets. This allows the selectors to show available nodes.
+        self.ui.inputAnatomicalSelector.setMRMLScene(slicer.mrmlScene)
+        self.ui.inputFunctionalSelector.setMRMLScene(slicer.mrmlScene)
+        self.ui.outputVolumeSelector.setMRMLScene(slicer.mrmlScene)
 
-        # Create logic class. Logic implements all computations that should be possible to run
-        # in batch mode, without a graphical user interface.
+        # Create logic class. This handles all the actual computation work.
         self.logic = DBSTargetLocatorLogic()
-        self.logic.setupScene()
 
-        # Observers
+        # Observers - these let us respond to scene events like opening/closing scenes
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.StartCloseEvent, self.onSceneStartClose)
         self.addObserver(slicer.mrmlScene, slicer.mrmlScene.EndCloseEvent, self.onSceneEndClose)
 
-        # Connect UI elements
-        self.ui.inputMarkupSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputMarkupSelected)
-        self.ui.opacitySliderWidget.connect("valueChanged(double)", self.onOpacitySliderChanged)
-        self.ui.autoUpdateCheckBox.connect("clicked(bool)", self.onAutoUpdateClicked)
-        self.ui.outputLineEdit.connect("currentPathChanged(QString)", self.onOutputPathChanged)
+        # Connect UI elements - wire up all the buttons and controls to their callback functions
+        self.ui.inputAnatomicalSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputAnatomicalSelected)
+        self.ui.inputFunctionalSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onInputFunctionalSelected)
+        self.ui.outputVolumeSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onOutputVolumeSelected)
         self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
-        self.ui.exportDataButton.connect('clicked(bool)', self.onExportButtonClicked)
 
         # Make sure parameter node is initialized (needed for module reload)
         self.initializeParameterNode()
 
-        pathValue = self.logic.getExportPath()
-        if pathValue:
-            self.ui.outputLineEdit.setCurrentPath(pathValue)
 
-    def onExportButtonClicked(self):
-        """Export the current sphere model to disk."""
-        self.logic.exportSphereModel()
+    def cleanup(self):
+        """
+        Called when the application closes and the module widget is destroyed.
+        Clean up any observers we've created to prevent memory leaks.
+        """
+        self.removeObservers()
 
-    def onOutputPathChanged(self, newPath):
-        """Update the file path used for exporting the sphere model."""
-        self.logic.setExportPath(newPath)
+    def enter(self):
+        """
+        Called each time the user opens this module.
+        Make sure the parameter node exists and is up to date.
+        """
+        self.initializeParameterNode()
 
-    def onOpacitySliderChanged(self, newValue):
-        """Update the sphere model opacity and optionally refresh automatically."""
-        if slicer.mrmlScene.IsImporting():
-            return
-        self.logic.setOpacity(newValue)
-        if self.ui.autoUpdateCheckBox.checked:
-            self.onApplyButton()
+    def exit(self):
+        """
+        Called each time the user opens a different module.
+        Remove observers to prevent callbacks when we're not active.
+        """
+        if self._parameterNode:
+            self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
-    def onAutoUpdateClicked(self, checked):
-        """Toggle automatic updates of the sphere model when markup points change."""
-        if slicer.mrmlScene.IsImporting():
-            return
-        self.logic.setAutoUpdate(checked)
-        self.onApplyButton()
+    def onSceneStartClose(self, caller=None, event=None):
+        """
+        Called when the MRML scene starts closing.
+        We can do cleanup tasks here if needed.
+        """
+        self.setParameterNode(None)
 
-    def onApplyButton(self):
-        """Manually trigger the sphere model update using current inputs."""
-        try:
-            self.logic.updateSphere(self.ui.inputMarkupSelector.currentNode(), self.ui.opacitySliderWidget.value)
-        except Exception as e:
-            slicer.util.errorDisplay("Failed to compute results: " + str(e))
-            import traceback
-            traceback.print_exc()
+    def onSceneEndClose(self, caller=None, event=None):
+        """
+        Called after the MRML scene finishes closing.
+        Reinitialize everything so the module is ready to use again.
+        """
+        if self.parent.isEntered:
+            self.initializeParameterNode()
 
     def initializeParameterNode(self):
-        """Ensure a parameter node exists and reference the first markup if available."""
+        """
+        Ensure a parameter node exists and reference the first markup if available.
+        The parameter node stores all the settings and references for this module.
+        """
         self.setParameterNode(self.logic.getParameterNode())
-        if not self._parameterNode.GetNodeReference(self.logic.INPUT_MARKUP):
-            firstMarkupNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLMarkupsFiducialNode")
-            if firstMarkupNode:
-                self._parameterNode.SetNodeReferenceID(self.logic.INPUT_MARKUP, firstMarkupNode.GetID())
+
+        # If no anatomical volume is selected yet, try to use the first scalar volume in the scene
+        if not self._parameterNode.GetNodeReference(self.logic.INPUT_ANATOMICAL):
+            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+            if firstVolumeNode:
+                self._parameterNode.SetNodeReferenceID(self.logic.INPUT_ANATOMICAL, firstVolumeNode.GetID())
 
     def setParameterNode(self, inputParameterNode):
-        """Set the parameter node and update observers to keep the GUI in sync."""
+        """
+        Set the parameter node and update observers to keep the GUI in sync.
+        This ensures that when the parameter node changes, the UI updates automatically.
+        """
         if self._parameterNode:
             self.removeObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
         self._parameterNode = inputParameterNode
         if self._parameterNode:
             self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
+
+        # Update the GUI to match the current parameter node
         self.updateGUIFromParameterNode()
 
     def updateGUIFromParameterNode(self, caller=None, event=None):
-        """Synchronize GUI elements with the current parameter node values."""
+        """
+        Synchronize GUI elements with the current parameter node values.
+        This is called whenever the parameter node is modified, ensuring the UI always
+        reflects the current state of the module.
+        """
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
+
+            # Prevent recursive updates - we don't want GUI changes triggering more GUI updates
         self._updatingGUIFromParameterNode = True
-        inputNode = self._parameterNode.GetNodeReference(self.logic.INPUT_MARKUP)
-        self.ui.inputMarkupSelector.setCurrentNode(inputNode)
-        self.ui.opacitySliderWidget.value = self.logic.getOpacity()
-        self.ui.autoUpdateCheckBox.setChecked(self.logic.getAutoUpdate())
+
+        # Update each UI element to match the parameter node
+        anatomicalNode = self._parameterNode.GetNodeReference(self.logic.INPUT_ANATOMICAL)
+        functionalNode = self._parameterNode.GetNodeReference(self.logic.INPUT_FUNCTIONAL)
+        outputNode = self._parameterNode.GetNodeReference(self.logic.OUTPUT_VOLUME)
+
+        self.ui.inputAnatomicalSelector.setCurrentNode(anatomicalNode)
+        self.ui.inputFunctionalSelector.setCurrentNode(functionalNode)
+        self.ui.outputVolumeSelector.setCurrentNode(outputNode)
+
+        # Enable the Apply button only if we have the required inputs
+        self.ui.applyButton.enabled = anatomicalNode is not None and functionalNode is not None
+
+        # All done updating, allow callbacks again
         self._updatingGUIFromParameterNode = False
 
-    def onInputMarkupSelected(self, newNode):
-        """Update the parameter node when the user selects a different markup node."""
+    def onInputAnatomicalSelected(self, newNode):
+        """
+        Called when the user selects a different anatomical volume from the dropdown.
+        Updates the parameter node to track the new selection.
+        """
         if self._parameterNode is None or self._updatingGUIFromParameterNode:
             return
+
         if newNode is None:
-            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_MARKUP, None)
-            self.logic.setAutoUpdate(False)
+            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_ANATOMICAL, None)
         else:
-            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_MARKUP, newNode.GetID())
+            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_ANATOMICAL, newNode.GetID())
 
-    def onSceneStartClose(self, caller=None, event=None):
-        """Handle tasks when the MRML scene starts closing."""
-        # e.g., clear references to nodes or UI
-        pass
+    def onInputFunctionalSelected(self, newNode):
+        """
+        Called when the user selects a different functional volume from the dropdown.
+        Updates the parameter node to track the new selection.
+        """
+        if self._parameterNode is None or self._updatingGUIFromParameterNode:
+            return
 
-    def onSceneEndClose(self, caller=None, event=None):
-        """Reinitialize the parameter node after the MRML scene finishes closing."""
-        # e.g., re-initialize parameter node
-        self.initializeParameterNode()
+        if newNode is None:
+            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_FUNCTIONAL, None)
+        else:
+            self._parameterNode.SetNodeReferenceID(self.logic.INPUT_FUNCTIONAL, newNode.GetID())
+
+    def onOutputVolumeSelected(self, newNode):
+        """
+        Called when the user selects a different output volume from the dropdown.
+        Updates the parameter node to track the new selection.
+        """
+        if self._parameterNode is None or self._updatingGUIFromParameterNode:
+            return
+
+        if newNode is None:
+            self._parameterNode.SetNodeReferenceID(self.logic.OUTPUT_VOLUME, None)
+        else:
+            self._parameterNode.SetNodeReferenceID(self.logic.OUTPUT_VOLUME, newNode.GetID())
+
+    def onApplyButton(self):
+        """
+        Called when the user clicks the Apply button.
+        Triggers the fMRI analysis using the selected anatomical and functional volumes.
+        """
+        try:
+            # Get the input volumes
+            anatomicalVolume = self.ui.inputAnatomicalSelector.currentNode()
+            functionalVolume = self.ui.inputFunctionalSelector.currentNode()
+            outputVolume = self.ui.outputVolumeSelector.currentNode()
+
+            # Run the analysis
+            self.logic.analyzeFMRI(anatomicalVolume, functionalVolume, outputVolume)
+
+            # Show completion message
+            slicer.util.infoDisplay("fMRI analysis completed successfully!")
+
+        except Exception as e:
+            slicer.util.errorDisplay("Failed to complete analysis: " + str(e))
+            import traceback
+            traceback.print_exc()
 
 #
 # DBSTargetLocatorLogic
 #
 
 class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
-    """This class should implement all the actual
-    computation done by your module.  The interface
-    should be such that other python code can import
-    this class and make use of the functionality without
-    requiring an instance of the Widget.
+    """
+    This class implements all the actual computation for the module.
+    The interface is designed so other Python code can import this class and use its
+    functionality without needing the GUI widget.
     Uses ScriptedLoadableModuleLogic base class, available at:
     https://github.com/Slicer/Slicer/blob/main/Base/Python/slicer/ScriptedLoadableModule.py
     """
 
-    OUTPUT_PATH_SETTING = "DBSTargetLocator/OutputPath"
-    INPUT_MARKUP = "InputMarkup"
-    SPHERE_MODEL = "SphereModel"
-    OPACITY = "Opacity"
-    OPACITY_DEFAULT = 0.8
-    AUTOUPDATE = "AutoUpdate"
-    AUTOUPDATE_DEFAULT = False
+    # Constants for parameter node keys - these help us store and retrieve settings
+    INPUT_ANATOMICAL = "InputAnatomical"
+    INPUT_FUNCTIONAL = "InputFunctional"
+    OUTPUT_VOLUME = "OutputVolume"
 
     def __init__(self):
-        """Called when the logic class is instantiated. Can be used for initializing member variables."""
+        """
+        Called when the logic class is instantiated.
+        Initialize member variables that we'll use throughout the logic's lifecycle.
+        """
         ScriptedLoadableModuleLogic.__init__(self)
         VTKObservationMixin.__init__(self)
-        self.fiducialNode = None
-        self.sphereNode = None
-        self.observedMarkupNode = None
-        self.isImporting = False
 
-    def setupScene(self):
-        """Create the sphere model if needed and set up scene observers."""
-        parameterNode = self.getParameterNode()
-        sphereModel = parameterNode.GetNodeReference(self.SPHERE_MODEL)
-        if not sphereModel:
-            sphereModel = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLModelNode", self.SPHERE_MODEL)
-            sphereModel.CreateDefaultDisplayNodes()
-            parameterNode.SetNodeReferenceID(self.SPHERE_MODEL, sphereModel.GetID())
-        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.StartImportEvent, self.onSceneImportStart)
-        self.addObserver(slicer.mrmlScene, slicer.vtkMRMLScene.EndImportEvent, self.onSceneImportEnd)
-        self.setAutoUpdate(self.getAutoUpdate())
 
-    def exportSphereModel(self):
-        """Save the sphere model to the file system at the configured export path."""
-        parameterNode = self.getParameterNode()
-        sphereNode = parameterNode.GetNodeReference(self.SPHERE_MODEL)
-        if not sphereNode:
-            logging.info("Cannot export sphere model, not created yet")
-            return
-        exportPath = slicer.util.settingsValue(self.OUTPUT_PATH_SETTING, "")
-        fileName = sphereNode.GetName() + ".stl"
-        fileFullName = os.path.join(exportPath, fileName)
-        logging.info("Exporting sphere model to: {}".format(fileFullName))
-        slicer.util.saveNode(sphereNode, fileFullName)
 
-    def onSceneImportStart(self, caller, event):
-        """Record nodes and set importing flag at the start of scene import."""
-        self.isImporting = True
-        parameterNode = self.getParameterNode()
-        self.sphereNode = parameterNode.GetNodeReference(self.SPHERE_MODEL)
-        self.fiducialNode = parameterNode.GetNodeReference(self.INPUT_MARKUP)
+    def analyzeFMRI(self, anatomicalVolume, functionalVolume, outputVolume=None):
+        """
+        Perform fMRI analysis to identify candidate DBS target locations.
 
-    def onSceneImportEnd(self, caller, event):
-        """Restore sphere and markup nodes after scene import finishes."""
-        parameterNode = self.getParameterNode()
-        currentSphereNode = parameterNode.GetNodeReference(self.SPHERE_MODEL)
-        if self.sphereNode != currentSphereNode:
-            parameterNode.SetNodeReferenceID(self.SPHERE_MODEL, self.sphereNode.GetID())
-            self.removeNode(currentSphereNode)
+        This is the main analysis function where we'll implement our DBS target localization algorithm.
+        It takes anatomical (T1w) and functional (BOLD) MRI data as input and produces an output
+        volume highlighting regions of interest for potential DBS electrode placement.
 
-        currentMarkup = parameterNode.GetNodeReference(self.INPUT_MARKUP)
-        if self.fiducialNode != currentMarkup:
-            self.removeNode(self.fiducialNode)
-            self.fiducialNode = currentMarkup
+        Parameters:
+        - anatomicalVolume: The T1-weighted anatomical MRI volume node
+        - functionalVolume: The BOLD fMRI volume node (4D timeseries)
+        - outputVolume: Optional output volume node for results. If None, a new one is created.
 
-        self.isImporting = False
-        self.setAutoUpdate(self.getAutoUpdate())
-        self.updateSphere(currentMarkup, self.getOpacity())
-        parameterNode.Modified()
+        Returns:
+        - The output volume node containing the analysis results
 
-    def removeNode(self, node):
-        """Safely remove a node along with its display and storage nodes."""
-        if node is None:
-            return
-        for i in range(node.GetNumberOfDisplayNodes()):
-            slicer.mrmlScene.RemoveNode(node.GetNthDisplayNode(i))
-        for i in range(node.GetNumberOfStorageNodes()):
-            slicer.mrmlScene.RemoveNode(node.GetNthStorageNode(i))
-        slicer.mrmlScene.RemoveNode(node)
+        TODO: Implement our fMRI analysis pipeline here, may include:
+        - Preprocessing (motion correction, spatial smoothing, temporal filtering)
+        - Statistical analysis (activation maps, connectivity analysis)
+        - Region of interest identification
+        - Target localization based on clinical criteria
+        """
 
-    def setOpacity(self, newValue):
-        """Store the sphere model opacity in the parameter node."""
-        self.getParameterNode().SetParameter(self.OPACITY, str(newValue))
+        # Validate inputs
+        if not anatomicalVolume or not functionalVolume:
+            raise ValueError("Both anatomical and functional volumes are required")
 
-    def getOpacity(self):
-        """Retrieve the current sphere model opacity, or default if unset."""
-        value = self.getParameterNode().GetParameter(self.OPACITY)
-        return float(value) if value else self.OPACITY_DEFAULT
+        logging.info("Starting fMRI analysis...")
+        logging.info(f"Anatomical volume: {anatomicalVolume.GetName()}")
+        logging.info(f"Functional volume: {functionalVolume.GetName()}")
 
-    def setAutoUpdate(self, autoUpdate):
-        """Enable or disable automatic updating of the sphere model."""
-        parameterNode = self.getParameterNode()
-        parameterNode.SetParameter(self.AUTOUPDATE, "true" if autoUpdate else "false")
-        markupNode = parameterNode.GetNodeReference(self.INPUT_MARKUP)
-        if self.observedMarkupNode:
-            self.removeObserver(self.observedMarkupNode, slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onMarkupsUpdated)
-            self.observedMarkupNode = None
-        if autoUpdate and markupNode:
-            self.observedMarkupNode = markupNode
-            self.addObserver(self.observedMarkupNode, slicer.vtkMRMLMarkupsNode.PointModifiedEvent, self.onMarkupsUpdated)
+        # TODO: Implement registration of anatomical mri with fmri before analysis
+        # look into use of BRAINSFit module for this
+        # https://www.slicer.org/w/index.php/Documentation/Nightly/Modules/BRAINSFit
 
-    def getAutoUpdate(self):
-        """Return whether auto-update is enabled."""
-        value = self.getParameterNode().GetParameter(self.AUTOUPDATE)
-        if not value:
-            return self.AUTOUPDATE_DEFAULT
-        return value.lower() != "false"
+        # Create output volume if not provided
+        if not outputVolume:
+            outputVolume = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "DBSTargetMap")
+            logging.info(f"Created output volume: {outputVolume.GetName()}")
 
-    def setExportPath(self, newPath):
-        """Store the export path for the sphere model in settings."""
-        qt.QSettings().setValue(self.OUTPUT_PATH_SETTING, newPath)
+        # TODO: Add our fMRI analysis implementation here
+        # This is where we'll implement the core functionality for:
+        # 1. Loading and preprocessing the fMRI data
+        # 2. Analyzing functional connectivity or activation patterns
+        # 3. Identifying candidate target regions based on our criteria
+        # 4. Creating a visualization/map of potential DBS targets
 
-    def getExportPath(self):
-        """Retrieve the configured export path for the sphere model."""
-        return slicer.util.settingsValue(self.OUTPUT_PATH_SETTING, None)
+        # For now, we'll just copy the anatomical volume to demonstrate data flow
+        # Replace this with actual analysis pipeline
+        logging.info("Running analysis (placeholder implementation)...")
 
-    def onMarkupsUpdated(self, caller, event):
-        """Callback triggered when markup points are modified to update the sphere."""
-        markupNode = self.getParameterNode().GetNodeReference(self.INPUT_MARKUP)
-        self.updateSphere(markupNode, self.getOpacity())
+        # Get the anatomical volume data
+        anatomicalArray = slicer.util.arrayFromVolume(anatomicalVolume)
 
-    def updateSphere(self, inputMarkup, opacity):
-        """Compute and update the sphere model based on the first two markup points."""
-        parameterNode = self.getParameterNode()
-        outputModel = parameterNode.GetNodeReference(self.SPHERE_MODEL)
-        if not inputMarkup or not outputModel:
-            return
-        if inputMarkup.GetNumberOfControlPoints() < 2:
-            return
-        p0, p1 = np.zeros(3), np.zeros(3)
-        inputMarkup.GetNthControlPointPosition(0, p0)
-        inputMarkup.GetNthControlPointPosition(1, p1)
-        center = (p0 + p1) / 2.0
-        radius = np.linalg.norm(p1 - p0) / 2.0
-        sphereSource = vtk.vtkSphereSource()
-        sphereSource.SetCenter(center)
-        sphereSource.SetRadius(radius)
-        sphereSource.Update()
-        if outputModel.GetNumberOfDisplayNodes() < 1:
-            outputModel.CreateDefaultDisplayNodes()
-        outputModel.SetAndObservePolyData(sphereSource.GetOutput())
-        outputModel.GetDisplayNode().SetOpacity(opacity)
+        # TODO: Process the functional volume
+        # functionalArray = slicer.util.arrayFromVolume(functionalVolume)
+        # Note: Functional volume is 4D (time series), so we'll need to handle the temporal dimension
+
+        # TODO: Implement our analysis algorithm here
+        # For now, just creates a placeholder output based on the anatomical volume
+        outputArray = np.copy(anatomicalArray)
+
+        # Update the output volume with the results
+        slicer.util.updateVolumeFromArray(outputVolume, outputArray)
+        outputVolume.CopyOrientation(anatomicalVolume)
+
+        logging.info("fMRI analysis completed")
+
+        return outputVolume
+
+    def preprocessFunctionalData(self, functionalVolume):
+        """
+        Preprocess the functional MRI data before analysis.
+
+        TODO: Implement preprocessing steps such as:
+        - Motion correction
+        - Slice timing correction
+        - Spatial smoothing
+        - Temporal filtering (high-pass, low-pass)
+        - Normalization
+        This can be done with use of the information provided in the JSON sidecar files
+        associated with each mri scan in our data set
+
+        Parameters:
+        - functionalVolume: The raw BOLD fMRI volume node
+
+        Returns:
+        - Preprocessed functional volume
+        """
+        logging.info("Preprocessing functional data (not yet implemented)...")
+        # TODO: Add preprocessing implementation
+        pass
+
+    def computeConnectivityMap(self, functionalVolume, seedPoint):
+        """
+        Compute functional connectivity map from a seed region.
+
+        TODO: We could try to implement connectivity analysis to identify brain regions that are
+        functionally connected to a region of interest. This will help with the robustness of our target localization
+        and visualization
+
+        Parameters:
+        - functionalVolume: The preprocessed BOLD fMRI volume
+        - seedPoint: The seed location [x, y, z] for connectivity analysis
+
+        Returns:
+        - Connectivity map volume
+        """
+        logging.info("Computing connectivity map (not yet implemented)...")
+        # TODO: Add connectivity analysis implementation
+        pass
+
+    def identifyTargetRegions(self, analysisVolume, threshold=None):
+        """
+        Identify and rank potential DBS target regions based on analysis results.
+
+        TODO: Implement target identification logic based on:
+        - Statistical thresholds
+        - Anatomical constraints
+        - Clinical criteria for DBS in depression
+        We will likely use healthy scans to develop a baseline and compare scans from patients with
+        depression against the baseline.
+
+        Parameters:
+        - analysisVolume: The volume containing analysis results
+        - threshold: Optional threshold for region selection
+
+        Returns:
+        - List of candidate target regions with coordinates and metrics
+        """
+        logging.info("Identifying target regions (not yet implemented)...")
+        # TODO: Add target identification implementation
+        pass
+
+    def loadJSONMetadata(self, jsonFilePath):
+        """
+        Load and parse JSON sidecar metadata from BIDS-formatted neuroimaging data.
+
+        The JSON files contain important parameters like:
+        - RepetitionTime (TR)
+        - EchoTime (TE)
+        - FlipAngle
+        - SliceTiming
+        that we will need to consider when working with this data
+
+        Parameters:
+        - jsonFilePath: Path to the JSON metadata file
+
+        Returns:
+        - Dictionary containing the parsed metadata
+        """
+        import json
+
+        if not os.path.exists(jsonFilePath):
+            logging.warning(f"JSON metadata file not found: {jsonFilePath}")
+            return {}
+
+        try:
+            with open(jsonFilePath, 'r') as f:
+                metadata = json.load(f)
+            logging.info(f"Loaded metadata from: {jsonFilePath}")
+            return metadata
+        except Exception as e:
+            logging.error(f"Failed to load JSON metadata: {str(e)}")
+            return {}
 
 #
 # DBSTargetLocatorTest
 #
 
 class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
-    """Ideally you should have several levels of tests.  At the lowest level
-    tests should exercise the functionality of the logic with different inputs
-    (both valid and invalid).  At higher levels your tests should emulate the
-    way the user would interact with your code and confirm that it still works
-    the way you intended.
-    One of the most important features of the tests is that it should alert other
-    developers when their changes will have an impact on the behavior of your
-    module.  For example, if a developer removes a feature that you depend on,
-    your test should break so they know that the feature is needed.
+    """
+    This is the test case for our scripted module.
+    Tests verify that the module loads data correctly and performs basic operations.
     """
 
     def setUp(self):
-        """Do whatever is needed to reset the state - typically a scene clear will be enough."""
+        """
+        Reset the state before each test.
+        Clearing the scene ensures tests are independent and repeatable.
+        """
         slicer.mrmlScene.Clear()
 
     def runTest(self):
-        """Run as few or as many tests as needed here."""
+        """
+        Run the test suite.
+        We can add multiple test methods here as our module grows.
+        """
         self.setUp()
-        self.test_DBSTargetLocator1()
+        self.test_DBSTargetLocator_DataLoading()
+        self.test_DBSTargetLocator_BasicAnalysis()
 
-    def test_DBSTargetLocator1(self):
-        """Test that the DBS Target Locator logic correctly creates and updates a sphere model from markup points."""
-        self.delayDisplay("Starting test")
-        import SampleData
+    def test_DBSTargetLocator_DataLoading(self):
+        """
+        Test that the OpenNeuro sample data can be loaded correctly.
+        This verifies the data source registration and download mechanism.
+        """
+        self.delayDisplay("Starting data loading test")
+
+        # Register the sample data sources
         registerSampleData()
-        inputVolume = SampleData.downloadSample('DBSTargetLocator1')
-        self.delayDisplay("Loaded sample data")
 
+        # Try to download the anatomical MRI
+        import SampleData
+        try:
+            anatomicalVolume = SampleData.downloadSample('sub-NDARINVAG023WG3_T1w (Anatomical MRI)')
+            self.assertIsNotNone(anatomicalVolume, "Failed to load anatomical volume")
+            self.delayDisplay("Successfully loaded anatomical MRI")
+        except Exception as e:
+            logging.warning(f"Could not download anatomical data: {str(e)}")
+            logging.warning("This may be expected if you don't have internet connectivity")
+
+        # Try to download the functional MRI
+        try:
+            functionalVolume = SampleData.downloadSample('sub-NDARINVAG023WG3_task-restAP (fMRI)')
+            self.assertIsNotNone(functionalVolume, "Failed to load functional volume")
+            self.delayDisplay("Successfully loaded functional MRI")
+        except Exception as e:
+            logging.warning(f"Could not download functional data: {str(e)}")
+            logging.warning("This may be expected if you don't have internet connectivity")
+
+        self.delayDisplay('Data loading test completed')
+
+    def test_DBSTargetLocator_BasicAnalysis(self):
+        """
+        Test that the basic analysis pipeline runs without errors.
+        This uses synthetic test data to verify the logic flow.
+        """
+        self.delayDisplay("Starting basic analysis test")
+
+        # Create synthetic test volumes
+        imageSize = [64, 64, 64]
+        imageSpacing = [1.0, 1.0, 1.0]
+        imageOrigin = [0.0, 0.0, 0.0]
+
+        # Create anatomical volume
+        anatImageArray = np.full(imageSize, 100, dtype=np.uint8)
+        # Create the node from the array
+        anatomicalVolume = slicer.util.addVolumeFromArray(anatImageArray)
+        # Set properties on the node object
+        anatomicalVolume.SetName("TestAnatomical")
+        anatomicalVolume.SetSpacing(imageSpacing)
+        anatomicalVolume.SetOrigin(imageOrigin)
+
+        # Create "functional" volume (using 3D for simplicity but real data is 4D fmri)
+        funcImageArray = np.full(imageSize, 50, dtype=np.uint8)
+        # Create the node from the array
+        functionalVolume = slicer.util.addVolumeFromArray(funcImageArray)
+        # Set properties on the node object
+        functionalVolume.SetName("TestFunctional")
+        functionalVolume.SetSpacing(imageSpacing)
+        functionalVolume.SetOrigin(imageOrigin)
+
+        # Check that volumes were created
+        self.assertIsNotNone(anatomicalVolume)
+        self.assertIsNotNone(functionalVolume)
+
+        # Create and test the logic
         logic = DBSTargetLocatorLogic()
-        logic.setupScene()
-        self.assertIsNotNone(inputVolume)
 
-        # Minimal test: just make sure updateSphere runs
-        markupNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-        markupNode.AddControlPoint([0, 0, 0])
-        markupNode.AddControlPoint([1, 1, 1])
-        logic.updateSphere(markupNode, 0.5)
-        outputModel = logic.getParameterNode().GetNodeReference(logic.SPHERE_MODEL)
-        self.assertIsNotNone(outputModel)
-        self.delayDisplay("Test passed")
+        # Run the analysis
+        try:
+            outputVolume = logic.analyzeFMRI(anatomicalVolume, functionalVolume)
+            self.assertIsNotNone(outputVolume, "Analysis did not produce output volume")
+
+            # Verify the output (in this base version, it's a copy of anatomical)
+            # we will need to generate more robust test cases once the DBS target locator logic is implemented
+            # that include true 4D fmri data
+            outputArray = slicer.util.arrayFromVolume(outputVolume)
+            self.assertTrue(np.array_equal(outputArray, anatImageArray))
+
+            self.delayDisplay("Analysis completed successfully")
+        except Exception as e:
+            self.fail(f"Analysis failed with error: {str(e)}")
+
+        self.delayDisplay('Basic analysis test passed!')
