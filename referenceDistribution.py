@@ -1,4 +1,4 @@
-# A Set of functions to be used to 
+A Set of Functions to be used to create a reference distribution
 
 import numpy as np
 import masks
@@ -91,5 +91,6 @@ def main():
     verifyNormality(avg)
 
     return
+
 
 main()
