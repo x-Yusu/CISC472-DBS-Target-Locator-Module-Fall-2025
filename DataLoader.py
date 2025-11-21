@@ -22,11 +22,12 @@ class DataLoader():
 
     def __init__(self):
         self.pipeline = [
-            self.coregister_all_vols,
-            self.normalize_to_template,
             self.as_nifti,
             self.smooth,
-            self.extract_brain
+            self.extract_brain,
+            self.coregister_all_vols,
+            self.as_nifti,
+            self.normalize_to_template
             ]
 
 
@@ -66,11 +67,11 @@ class DataLoader():
         fmri_data = fmri.get_fdata()
 
         # Register the first fMRI frame to the structural mri
-        fmri_data[...,0] = register_vols(mri, fmri_data[...,0])
+        fmri_data[...,0] = self.register_vols(mri, fmri_data[...,0])
 
         # Register all fmris to the first fMRI
         for i in range(1, fmri.shape[-1]):
-            fmri_data[...,i] = register_vols(fmri_data[...,0], fmri_data[...,i])
+            fmri_data[...,i] = self.register_vols(fmri_data[...,0], fmri_data[...,i])
 
         return (fmri_data, mri_data)
 
@@ -101,7 +102,7 @@ class DataLoader():
         Does an affine transform to map fmri to a template
         """
 
-        template = nil.datasets.load_mni152_template()
+        template = nil.datasets.load_mni152_template(resolution = 1.2)
         mri, mri_t = self.register_vols(template, mri, 'affine', True)
 
         # Find transform for one fMri
@@ -120,6 +121,14 @@ class DataLoader():
     def as_nifti(self, fmri, mri):
         """
         Casts the pair of fmri and mri numpy arrays to nifti objects
+
+        Parameters:
+            fmri - numpy.ndarray, 4d fmri reading
+            mri  - numpy.ndarray, 3d sructural mri reading
+
+        Returns:
+            fmri - nib.Nifti1Image, 4d fmri reading
+            mri  - nib.Nifti1Image, 3d sructural mri reading
         """
 
         convert = lambda vol : nib.Nifti1Image(vol, np.eye(4))
@@ -132,10 +141,26 @@ class DataLoader():
         """
         Masks out the brain from the background
         """
-        
-        mask = nil.masking.compute_brain_mask(mri)
-        mri  = mri * mask
-        fmri = fmri * mask[..., None]
+    
+        def get_otsu_extration(vol):
+            # Otsu threshold
+            otsu = sitk.OtsuThresholdImageFilter()
+            otsu.SetInsideValue(1)
+            otsu.SetOutsideValue(0)
+            mask = otsu.Execute(vol)
+            
+            # Clean up
+            mask = sitk.BinaryMorphologicalClosing(mask, [3, 3, 3])
+            mask = sitk.BinaryFillhole(mask)
+            
+            return mask
+
+        fmri_ref = sitk.Mean(image)
+        mask = get_otsu_extration(fmri_ref)
+        fmri = sitk.Mask(fmri, mask)
+
+        mask = get_otsu_extration(mri)
+        mri = sitk.Mask(mri, mask)
 
         return (fmri, mri)
 
