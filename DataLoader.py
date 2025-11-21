@@ -25,8 +25,8 @@ class DataLoader():
             self.coregister_all_vols,
             self.normalize_to_template,
             self.as_nifti,
-            self.extract_brain,
-            self.smooth
+            self.smooth,
+            self.extract_brain
             ]
 
 
@@ -39,21 +39,8 @@ class DataLoader():
         Loads an FMRI file, runs preprocessing and returns it as a numpy array
         """
 
-        if isinstance(fmri, np.ndarray):
-            self.pipeline.insert(0,self.as_nifti)
-
-        elif not isinstance(fmri, nibabel.nifti1.Nifti1Image):
-            raise ValueError("Inputs must be of type np.ndarray or nibabel.nifti1.Nifti1Image")
-
         for op in self.pipeline:
             fmri, mri = op(fmri, mri)
-
-        return (fmri, mri)
-
-
-    def as_nifti(self, fmri, mri):
-        convert = lambda vol : nib.Nifti1Image(vol, np.eye(4))
-        fmri, mri = map(convert, (fmri, mri))
 
         return (fmri, mri)
 
@@ -63,31 +50,16 @@ class DataLoader():
         Generator method for a directory of FMRI data files
         """
         
-        fmri_iter = os.paths.scandir(os.path.join(path,"fmri"))
-        mri_iter  = os.paths.scandir(os.path.join(path,"mri"))
+        fmri_iter = os.scandir(os.path.join(path,"fmri"))
+        mri_iter  = os.scandir(os.path.join(path,"mri"))
 
 
-        for frmi, mri in zip(fmri_iter, mri_iter):
+        for fmri, mri in zip(fmri_iter, mri_iter):
             fmri = nib.load(fmri.path)
             mri  = nib.load(mri.path)
             
             yield self.load_sample(fmri,mri)
-
-
-    def smooth(self, fmri, mri):
-        smoothing_func = lambda x : nil.image.smooth_img(x)
-        fmri, mri = map(as_nifti, (fmri, mri))
-        
-        return (fmri, mri)
-
-
-    def extract_brain(self, fmri, mri):
-        mask = nil.masking.compute_brain_mask(mri)
-        mri  = mri * mask
-        fmri = fmri * mask[..., None]
-
-        return (fmri, mri)
-
+ 
 
     def coregister_all_vols(self, fmri, mri):
         mri_data  = mri.get_fdata()
@@ -103,41 +75,76 @@ class DataLoader():
         return (fmri_data, mri_data)
 
 
-    def register_vols(v1,v2, mode='rigid', return_transform=False):
-        reg = HistogramRegistration(v1, v2, similarity=similarity)
+    def register_vols(self, v1, v2, mode='rigid', return_transform=False):
+        reg = HistogramRegistration(v1, v2)
         T = reg.optimize(mode)
 
-        registered = affine_transform(
-            v2,
-            np.linalg.inv(T.as_affine()[:3, :3]),
-            offset=-T.as_affine()[:3, 3],
-            order=3
-        )
+        v2 = self.apply_affine(v2, T)
 
         if return_transform: return (v2, T)
         return v2
 
 
-    def normalize_to_template(self, mri, fmri):
-        template = nil.datasets.load_mni152_template()
+    def apply_affine(self, target, transform):
+        target = affine_transform(
+            target,
+            np.linalg.inv(transform.as_affine()[:3, :3]),
+            offset=-transform.as_affine()[:3, 3],
+            order=3
+        )
 
-        # Apply to structural mri
-        mri, mri_t = register_vols(template, mri, 'affine', True)
+        return target
+
+
+    def normalize_to_template(self, fmri, mri):
+        """
+        Does an affine transform to map fmri to a template
+        """
+
+        template = nil.datasets.load_mni152_template()
+        mri, mri_t = self.register_vols(template, mri, 'affine', True)
 
         # Find transform for one fMri
-        fmri[...,0], fmri_t = register_vols(template, mri, 'affine', True)
+        fmri[...,0], fmri_t = self.register_vols(template, fmri[...,0], 'affine', True)
 
         # Register all fmris to the first fMRI
         for i in range(1, fmri.shape[-1]):
-            fmri[...,i] = affine_transform(
-                fmri[...,i],
-                np.linalg.inv(fmri_t.as_affine()[:3, :3]),
-                offset=-fmri_t.as_affine()[:3, 3],
-                order=3
-            )
-        
+            fmri[...,i] = apply_affine(fmri[...,i], fmri_t)
+            
         self.mri_t  = mri_t
         self.fmri_t = fmri_t
 
-        return (mri, fmri)
+        return (fmri,mri)
+
+
+    def as_nifti(self, fmri, mri):
+        """
+        Casts the pair of fmri and mri numpy arrays to nifti objects
+        """
+
+        convert = lambda vol : nib.Nifti1Image(vol, np.eye(4))
+        fmri, mri = map(convert, (fmri, mri))
+
+        return (fmri, mri)
+
+
+    def extract_brain(self, fmri, mri):
+        """
+        Masks out the brain from the background
+        """
+        
+        mask = nil.masking.compute_brain_mask(mri)
+        mri  = mri * mask
+        fmri = fmri * mask[..., None]
+
+        return (fmri, mri)
+
+
+    def smooth(self, fmri, mri):
+        """
+        Applies a gaussian filter
+        """
+        fmri, mri = nil.image.smooth_img(fmri), nil.image.smooth_img(mri)
+        
+        return (fmri, mri)
      
