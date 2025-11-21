@@ -17,23 +17,23 @@ class DataLoader():
 
     def __call__(self, path=None):
         if os.path.isdir(path):
-            load_directory(path)
+            return self.load_directory(path)
         
         else:
-            load_sample(path)
+            return self.load_sample(path)
 
     
-    def load_sample(path=None):
+    def load_sample(self,path=None):
         """
         Loads an FMRI file, runs preprocessing and returns it as a numpy array
         """
-        return np.random.rand((100,100,100,20))
+        return np.random.rand(100,100,100,20)
 
 
-    def load_directory(path=None):
+    def load_directory(self,path=None):
         """
         Generator method for a directory of FMRI data files
         """
 
         for i in range(20):
-            yield load_sample
+            yield self.load_sample()
