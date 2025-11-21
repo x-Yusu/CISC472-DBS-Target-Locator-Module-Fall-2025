@@ -10,7 +10,7 @@ This file contains the DataLoader class, which loads FMRI data, preprocesses it,
 import numpy as np
 import os
 
-import nilearn
+import nilearn as nil
 import nibabel as nib
 
 class DataLoader():
@@ -18,10 +18,10 @@ class DataLoader():
     def __init__(self):
         self.pipeline = [
             self.smooth,
-            self.correct_motion,
             self.coregister_vols,
             self.extract_brain
             ]
+
 
     def __call__(self, *args):
         return self.load_sample(*args)
@@ -62,17 +62,44 @@ class DataLoader():
 
 
     def smooth(self, fmri, mri):
+        smoothing_func = lambda x : nil.image.smooth_img(x)
+        fmri, mri = map(as_nifti, (fmri, mri))
+        
         return (fmri, mri)
 
+
     def extract_brain(self, fmri, mri):
-        mask = nilearn.masking.compute_brain_mask(mri)
+        mask = nil.masking.compute_brain_mask(mri)
         mri  = mri * mask
         fmri = fmri * mask[..., None]
 
         return (fmri, mri)
 
-    def correct_motion(self, fmri, mri):
-        pass
-
     def coregister_vols(self, fmri, mri):
-        pass
+        fmri_data = fmri.get_fdata()
+        n_volumes = fmri_data.shape[3]
+        
+        # Resample each volume
+        output_data = []
+        for t in range(n_volumes):
+            vol_img = nib.Nifti1Image(
+                fmri_data[:, :, :, t],
+                fmri.affine,
+                fmri.header
+            )
+            
+            vol_resampled = resample_to_img(
+                vol_img,
+                mri,
+                interpolation='continuous'
+            )
+            
+            output_data.append(vol_resampled.get_fdata())
+        
+        # Stack into 4D
+        output_4d = np.stack(output_data, axis=-1)
+        func_coreg = nib.Nifti1Image(
+            output_4d,
+            self.anat_brain.affine,
+            self.anat_brain.header
+        )
