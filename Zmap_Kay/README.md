@@ -14,7 +14,9 @@ When running from the beginning, delete everything except the src folder and exe
 1. Download the healthy control dataset (src/download_abide_controls.py). Download source: http://preprocessed-connectomes-project.org/abide/
 2. Create an average fMRI map from the healthy control dataset (src/generate_reference_map.py).
 3. Place the fMRI data of the depression patient in data/test_patient_ALFF.
-4.1. Create a mask for the depression ROI (src/generate_mni_roi_masks.py). For ROI coordinates, refer to https://doi.org/10.3389/fneur.2021.751400.
-4.2 Run src/test_volume_scoring.py to calculate the Z-score for the patient's ROI. 
+4. Create a mask for the depression ROI (src/generate_mni_roi_masks.py). For ROI coordinates, refer to https://doi.org/10.3389/fneur.2021.751400.
+5. Run src/test_volume_scoring.py to calculate the Z-score for the patient's ROI. 
+
 $$Z = \frac{X - \mu}{\sigma}$$
-5. Calculate the whole-brain Z-score, output a CSV file sorted in descending order by Z-score for each brain region, and further output a .nii.gz file mapping the Z-scores to 3D space (src/test_whole_brain_analysis.py).
+
+6. Calculate the whole-brain Z-score, output a CSV file sorted in descending order by Z-score for each brain region, and further output a .nii.gz file mapping the Z-scores to 3D space (src/test_whole_brain_analysis.py).
