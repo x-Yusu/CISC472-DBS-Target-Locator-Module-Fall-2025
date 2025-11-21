@@ -1,4 +1,4 @@
-A Set of Functions to be used to create a reference distribution
+#A Set of Functions to be used to create a reference distribution
 
 import numpy as np
 import masks
