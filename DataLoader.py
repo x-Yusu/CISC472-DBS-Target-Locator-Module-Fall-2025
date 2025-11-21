@@ -13,7 +13,7 @@ import os
 class DataLoader():
 
     def __init__(self):
-        pass
+        self.pipeline = [self.extract_brain,self.correct_motion,self.coregister_vols]
 
     def __call__(self, path=None):
         if os.path.isdir(path):
@@ -23,11 +23,15 @@ class DataLoader():
             return self.load_sample(path)
 
     
-    def load_sample(self,path=None):
+    def load_sample(self, fmri, mri):
         """
         Loads an FMRI file, runs preprocessing and returns it as a numpy array
         """
-        return np.random.rand(100,100,100,20)
+
+        for op in self.pipeline:
+            fmri, mri = op(fmri, mri)
+
+        return img
 
 
     def load_directory(self,path=None):
@@ -37,3 +41,13 @@ class DataLoader():
 
         for i in range(20):
             yield self.load_sample()
+
+
+    def extract_brain(self, fmri, mri):
+        pass
+
+    def correct_motion(self, fmri, mri):
+        pass
+
+    def coregister_vols(self, fmri, mri):
+        pass
