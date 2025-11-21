@@ -13,12 +13,17 @@ import os
 import nilearn as nil
 import nibabel as nib
 
+from nipy.algorithms.registration import HistogramRegistration
+from scipy.ndimage import affine_transform
+
+from itertools import repeat
+
 class DataLoader():
 
     def __init__(self):
         self.pipeline = [
             self.smooth,
-            self.coregister_vols,
+            self.coregister_all_vols,
             self.extract_brain
             ]
 
@@ -33,7 +38,6 @@ class DataLoader():
         """
 
         if isinstance(fmri, np.ndarray):
-            as_nifti = lambda x : nib.Nifti1Image(x, np.eye(4))
             fmri, mri = map(as_nifti, (fmri, mri))
 
         elif not isinstance(fmri, nibabel.nifti1.Nifti1Image):
@@ -44,6 +48,8 @@ class DataLoader():
 
         return (fmri, mri)
 
+    def as_nifti(self, vol):
+        return nib.Nifti1Image(vol, np.eye(4))
 
     def load_directory(self,path):
         """
@@ -75,31 +81,30 @@ class DataLoader():
 
         return (fmri, mri)
 
-    def coregister_vols(self, fmri, mri):
+    def coregister_all_vols(self, fmri, mri):
+        mri_data  = mri.get_fdata()
         fmri_data = fmri.get_fdata()
-        n_volumes = fmri_data.shape[3]
-        
-        # Resample each volume
-        output_data = []
-        for t in range(n_volumes):
-            vol_img = nib.Nifti1Image(
-                fmri_data[:, :, :, t],
-                fmri.affine,
-                fmri.header
-            )
-            
-            vol_resampled = resample_to_img(
-                vol_img,
-                mri,
-                interpolation='continuous'
-            )
-            
-            output_data.append(vol_resampled.get_fdata())
-        
-        # Stack into 4D
-        output_4d = np.stack(output_data, axis=-1)
-        func_coreg = nib.Nifti1Image(
-            output_4d,
-            self.anat_brain.affine,
-            self.anat_brain.header
+
+        # Register the first fMRI frame to the structural mri
+        fmri_data[...,0] = register_vols(mri, fmri_data[...,0])
+
+        # Register all fmris to the first fMRI
+        for i in range(1, fmri.shape[-1]):
+            fmri_data[...,i] = register_vols(fmri_data[...,0], fmri_data[...,i])
+
+        return (fmri_data, mri_data)
+
+    def register_vols(v1,v2, mode='rigid'):
+        reg = HistogramRegistration(v1, v2, similarity=similarity)
+        T = reg.optimize(mode)
+
+        registered = affine_transform(
+            v2,
+            np.linalg.inv(T.as_affine()[:3, :3]),
+            offset=-T.as_affine()[:3, 3],
+            order=3
         )
+
+    def normalize_to_template(self, mri, fmri):
+        template = nil.datasets.load_mni152_template()
+     
