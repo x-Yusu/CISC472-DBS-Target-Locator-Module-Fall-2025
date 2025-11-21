@@ -22,9 +22,11 @@ class DataLoader():
 
     def __init__(self):
         self.pipeline = [
-            self.smooth,
             self.coregister_all_vols,
-            self.extract_brain
+            self.normalize_to_template,
+            self.as_nifti,
+            self.extract_brain,
+            self.smooth
             ]
 
 
@@ -38,7 +40,7 @@ class DataLoader():
         """
 
         if isinstance(fmri, np.ndarray):
-            fmri, mri = map(as_nifti, (fmri, mri))
+            self.pipeline.insert(0,self.as_nifti)
 
         elif not isinstance(fmri, nibabel.nifti1.Nifti1Image):
             raise ValueError("Inputs must be of type np.ndarray or nibabel.nifti1.Nifti1Image")
@@ -48,8 +50,13 @@ class DataLoader():
 
         return (fmri, mri)
 
-    def as_nifti(self, vol):
-        return nib.Nifti1Image(vol, np.eye(4))
+
+    def as_nifti(self, fmri, mri):
+        convert = lambda vol : nib.Nifti1Image(vol, np.eye(4))
+        fmri, mri = map(convert, (fmri, mri))
+
+        return (fmri, mri)
+
 
     def load_directory(self,path):
         """
@@ -81,6 +88,7 @@ class DataLoader():
 
         return (fmri, mri)
 
+
     def coregister_all_vols(self, fmri, mri):
         mri_data  = mri.get_fdata()
         fmri_data = fmri.get_fdata()
@@ -94,7 +102,8 @@ class DataLoader():
 
         return (fmri_data, mri_data)
 
-    def register_vols(v1,v2, mode='rigid'):
+
+    def register_vols(v1,v2, mode='rigid', return_transform=False):
         reg = HistogramRegistration(v1, v2, similarity=similarity)
         T = reg.optimize(mode)
 
@@ -105,6 +114,30 @@ class DataLoader():
             order=3
         )
 
+        if return_transform: return (v2, T)
+        return v2
+
+
     def normalize_to_template(self, mri, fmri):
         template = nil.datasets.load_mni152_template()
+
+        # Apply to structural mri
+        mri, mri_t = register_vols(template, mri, 'affine', True)
+
+        # Find transform for one fMri
+        fmri[...,0], fmri_t = register_vols(template, mri, 'affine', True)
+
+        # Register all fmris to the first fMRI
+        for i in range(1, fmri.shape[-1]):
+            fmri[...,i] = affine_transform(
+                fmri[...,i],
+                np.linalg.inv(fmri_t.as_affine()[:3, :3]),
+                offset=-fmri_t.as_affine()[:3, 3],
+                order=3
+            )
+        
+        self.mri_t  = mri_t
+        self.fmri_t = fmri_t
+
+        return (mri, fmri)
      
