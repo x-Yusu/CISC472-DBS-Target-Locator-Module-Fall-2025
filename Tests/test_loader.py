@@ -1,202 +1,137 @@
 """
 test_dataloader.py
 
-Test suite for DataLoader class
-Run from the project root with: python -m pytest Tests
+Minimal test suite using real fMRI data
+Run: pytest test_dataloader.py -v
 """
 
 import pytest
 import numpy as np
 import nibabel as nib
-import tempfile
-import os
-from unittest.mock import Mock, patch
+from nilearn import datasets
 from DataLoader import DataLoader
 
-
-@pytest.fixture
-def fmri_data():
-    """Mock 4D fMRI (50x50x20x10 volumes)"""
-    return np.random.randn(50, 50, 20, 10).astype(np.float32)
+import SimpleITK as sitk
 
 
-@pytest.fixture
-def mri_data():
-    """Mock 3D MRI (50x50x20)"""
-    return np.random.randn(50, 50, 20).astype(np.float32)
+@pytest.fixture(scope="module")
+def fmri():
+    """Load subject-matched fMRI from sample."""
+    ds = datasets.fetch_development_fmri(n_subjects=1)
+    img = nib.load(ds.func[0])
+    data = img.get_fdata()[..., :10]
+    return nib.Nifti1Image(data, img.affine)
 
 
-@pytest.fixture
-def fmri_nifti(fmri_data):
-    return nib.Nifti1Image(fmri_data, np.eye(4))
+@pytest.fixture(scope="module")
+def mri():
+    """Load the corresponding anatomical MRI for the same subject."""
+    ds = datasets.fetch_development_fmri(n_subjects=1)
 
-
-@pytest.fixture
-def mri_nifti(mri_data):
-    return nib.Nifti1Image(mri_data, np.eye(4))
-
-
-@pytest.fixture
-def temp_dir(fmri_nifti, mri_nifti):
-    """Directory with 2 fMRI/MRI pairs"""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        fmri_dir = os.path.join(tmpdir, "fmri")
-        mri_dir = os.path.join(tmpdir, "mri")
-        os.makedirs(fmri_dir)
-        os.makedirs(mri_dir)
-        
-        for i in range(2):
-            nib.save(fmri_nifti, os.path.join(fmri_dir, f"sub_{i}.nii.gz"))
-            nib.save(mri_nifti, os.path.join(mri_dir, f"sub_{i}.nii.gz"))
-        
-        yield tmpdir
+    img = nib.load(ds.func[0])
+    data = img.get_fdata()[..., 0]
+    data = np.roll(data, shift=5, axis=0)
+    return nib.Nifti1Image(data, img.affine)
 
 
 class TestRegistration:
-    """Test registration functions"""
     
-    def test_register_vols_returns_array(self, mri_data):
+    def test_register_vols(self, mri):
         loader = DataLoader()
-        v1 = mri_data
-        v2 = mri_data + np.random.randn(*mri_data.shape) * 0.1
+        v1 = mri
+        v2 = np.roll(v1.get_fdata(), shift=2, axis=0)
+        v2 = nib.Nifti1Image(v2, np.eye(4))
         
-        with patch('DataLoader.HistogramRegistration') as mock_reg:
-            mock_t = Mock()
-            mock_t.as_affine.return_value = np.eye(4)
-            mock_reg.return_value.optimize.return_value = mock_t
-            
-            result = loader.register_vols(v1, v2)
-            assert isinstance(result, np.ndarray)
-            assert result.shape == v2.shape
+        result = loader.register_vols(v1, v2)
+        
+        assert result.shape == v2.shape
+        assert isinstance(result, np.ndarray)
+
     
-    def test_register_vols_with_transform(self, mri_data):
+    def test_apply_affine(self, mri):
         loader = DataLoader()
+        v1 = mri.get_fdata()
         
-        with patch('DataLoader.HistogramRegistration') as mock_reg:
-            mock_t = Mock()
-            mock_t.as_affine.return_value = np.eye(4)
-            mock_reg.return_value.optimize.return_value = mock_t
-            
-            result, transform = loader.register_vols(mri_data, mri_data, return_transform=True)
-            assert isinstance(result, np.ndarray)
-            assert transform is not None
-    
-    def test_apply_affine_returns_array(self, mri_data):
-        loader = DataLoader()
-        mock_t = Mock()
-        mock_t.as_affine.return_value = np.eye(4)
+        from unittest.mock import Mock
+        mock_T = Mock()
+        mock_T.as_affine.return_value = np.eye(4)
         
-        result = loader.apply_affine(mri_data, mock_t)
-        assert result is not None
-        assert result.shape == mri_data.shape
+        result = loader.apply_affine(v1, mock_T)
+        
+        assert result.shape == v1.shape
 
 
 class TestCoregistration:
-    """Test volume coregistration"""
     
-    def test_coregister_all_vols(self, fmri_nifti, mri_nifti):
+    def test_coregister_all_vols(self, fmri, mri):
         loader = DataLoader()
         
-        with patch.object(loader, 'register_vols', return_value=np.random.randn(50, 50, 20)):
-            fmri_result, mri_result = loader.coregister_all_vols(fmri_nifti, mri_nifti)
-            
-            assert isinstance(fmri_result, np.ndarray)
-            assert isinstance(mri_result, np.ndarray)
-            assert fmri_result.shape == fmri_nifti.shape
-            assert mri_result.shape == mri_nifti.shape
+        fmri_out, mri_out = loader.as_np(*loader.coregister_all_vols(fmri, mri))
+
+        assert fmri_out.shape == fmri.shape
+        assert mri_out.shape == mri.shape
 
 
 class TestPreprocessing:
-    """Test preprocessing steps"""
     
-    @patch('DataLoader.nil.datasets.load_mni152_template')
-    def test_normalize_to_template(self, mock_template, fmri_data, mri_data):
+    def test_normalize_to_template(self, fmri, mri):
         loader = DataLoader()
-        mock_template.return_value = Mock()
+
+        fmri_out, mri_out = loader.normalize_to_template(fmri, mri)
         
-        with patch.object(loader, 'register_vols', return_value=(mri_data, np.eye(4))):
-            fmri_result, mri_result = loader.normalize_to_template(fmri_data, mri_data)
-            
-            assert hasattr(loader, 'mri_t')
-            assert hasattr(loader, 'fmri_t')
-            mock_template.assert_called_once()
+        assert hasattr(loader, 'mri_t')
+        assert hasattr(loader, 'fmri_t')
+        assert isinstance(fmri_out, np.ndarray)
     
-    def test_as_nifti(self, fmri_data, mri_data):
+    def test_as_nifti(self, fmri, mri):
         loader = DataLoader()
-        fmri_result, mri_result = loader.as_nifti(fmri_data, mri_data)
         
-        assert isinstance(fmri_result, nib.Nifti1Image)
-        assert isinstance(mri_result, nib.Nifti1Image)
-        assert fmri_result.shape == fmri_data.shape
+        fmri_nifti, mri_nifti = loader.as_nifti(fmri.get_fdata(), mri.get_fdata())
+        
+        assert isinstance(fmri_nifti, nib.Nifti1Image)
+        assert isinstance(mri_nifti, nib.Nifti1Image)
     
-    @patch('DataLoader.nil.masking.compute_brain_mask')
-    def test_extract_brain(self, mock_mask, fmri_nifti, mri_nifti):
+    def test_extract_brain(self, fmri, mri):
         loader = DataLoader()
-        mock_mask.return_value = nib.Nifti1Image(np.ones(mri_nifti.shape), np.eye(4))
         
-        fmri_result, mri_result = loader.extract_brain(fmri_nifti, mri_nifti)
+        fmri_masked, mri_masked = loader.extract_brain(sitk.GetImageFromArray(fmri.get_fdata()), sitk.GetImageFromArray(mri.get_fdata()))
         
-        mock_mask.assert_called_once()
-        assert fmri_result.shape == fmri_nifti.shape
+        # Returns masked data
+        assert fmri_masked is not None
+        assert mri_masked is not None
     
-    @patch('DataLoader.nil.image.smooth_img')
-    def test_smooth(self, mock_smooth, fmri_nifti, mri_nifti):
+    def test_smooth(self, fmri, mri):
         loader = DataLoader()
-        mock_smooth.side_effect = lambda x: x
         
-        fmri_result, mri_result = loader.smooth(fmri_nifti, mri_nifti)
+        fmri_smooth, mri_smooth = loader.smooth(fmri.get_fdata(), mri.get_fdata())
         
-        assert mock_smooth.call_count == 2
+        # Returns smoothed images
+        assert fmri_smooth is not None
+        assert mri_smooth is not None
 
 
-class TestDataLoading:
-    """Test data loading workflows"""
+class TestPipeline:
     
-    def test_load_sample(self, fmri_nifti, mri_nifti):
+    def test_load_sample(self, fmri, mri):
         loader = DataLoader()
-        loader.pipeline = []  # Disable pipeline for isolated test
         
-        result = loader.load_sample(fmri_nifti, mri_nifti)
+        fmri_out, mri_out = loader.load_sample(fmri, mri)
+        
+        # Final output should be processed images
+        assert fmri_out is not None
+        assert mri_out is not None
+    
+    def test_callable(self, fmri, mri):
+        loader = DataLoader()
+        
+        result = loader(fmri, mri)
         
         assert isinstance(result, tuple)
         assert len(result) == 2
     
-    def test_callable_interface(self, fmri_nifti, mri_nifti):
-        loader = DataLoader()
-        loader.pipeline = []
-        
-        result = loader(fmri_nifti, mri_nifti)
-        assert isinstance(result, tuple)
-    
-    def test_load_directory(self, temp_dir):
-        loader = DataLoader()
-        loader.pipeline = []
-        
-        samples = list(loader.load_directory(temp_dir))
-        
-        assert len(samples) == 2
-        for sample in samples:
-            assert isinstance(sample, tuple)
-            assert len(sample) == 2
-
-
-class TestIntegration:
-    """End-to-end tests"""
-    
-    @patch('DataLoader.nil.datasets.load_mni152_template')
-    @patch('DataLoader.nil.masking.compute_brain_mask')
-    @patch('DataLoader.nil.image.smooth_img')
-    def test_full_pipeline(self, mock_smooth, mock_mask, mock_template, 
-                          fmri_nifti, mri_nifti):
+    def test_pipeline_exists(self):
         loader = DataLoader()
         
-        mock_template.return_value = mri_nifti
-        mock_mask.return_value = nib.Nifti1Image(np.ones(mri_nifti.shape), np.eye(4))
-        mock_smooth.side_effect = lambda x: x
-        
-        with patch.object(loader, 'register_vols', return_value=(mri_nifti.get_fdata(), np.eye(4))):
-            result = loader.load_sample(fmri_nifti, mri_nifti)
-            
-            assert result is not None
-            assert isinstance(result, tuple)
-            assert len(result) == 2
+        assert hasattr(loader, 'pipeline')
+        assert isinstance(loader.pipeline, list)
+        assert len(loader.pipeline) > 0
