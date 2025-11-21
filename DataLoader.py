@@ -11,6 +11,7 @@ import numpy as np
 import os
 
 import nilearn
+import nibabel as nib
 
 class DataLoader():
 
@@ -31,8 +32,12 @@ class DataLoader():
         Loads an FMRI file, runs preprocessing and returns it as a numpy array
         """
 
-        as_nifti = lambda x : nib.Nifti1Image(x, np.eye(4))
-        fmri, mri = map(as_nifti, (fmri, mri))
+        if isinstance(fmri, np.ndarray):
+            as_nifti = lambda x : nib.Nifti1Image(x, np.eye(4))
+            fmri, mri = map(as_nifti, (fmri, mri))
+
+        elif not isinstance(fmri, nibabel.nifti1.Nifti1Image):
+            raise ValueError("Inputs must be of type np.ndarray or nibabel.nifti1.Nifti1Image")
 
         for op in self.pipeline:
             fmri, mri = op(fmri, mri)
@@ -40,13 +45,21 @@ class DataLoader():
         return (fmri, mri)
 
 
-    def load_directory(self,path=None):
+    def load_directory(self,path):
         """
         Generator method for a directory of FMRI data files
         """
+        
+        fmri_iter = os.paths.scandir(os.path.join(path,"fmri"))
+        mri_iter  = os.paths.scandir(os.path.join(path,"mri"))
 
-        for i in range(20):
-            yield self.load_sample()
+
+        for frmi, mri in zip(fmri_iter, mri_iter):
+            fmri = nib.load(fmri.path)
+            mri  = nib.load(mri.path)
+            
+            yield self.load_sample(fmri,mri)
+
 
     def smooth(self, fmri, mri):
         return (fmri, mri)
@@ -55,7 +68,7 @@ class DataLoader():
         mask = nilearn.masking.compute_brain_mask(mri)
         mri  = mri * mask
         fmri = fmri * mask[..., None]
-        
+
         return (fmri, mri)
 
     def correct_motion(self, fmri, mri):
