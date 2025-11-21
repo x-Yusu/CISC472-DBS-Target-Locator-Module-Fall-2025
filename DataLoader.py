@@ -10,17 +10,20 @@ This file contains the DataLoader class, which loads FMRI data, preprocesses it,
 import numpy as np
 import os
 
+import nilearn
+
 class DataLoader():
 
     def __init__(self):
-        self.pipeline = [self.extract_brain,self.correct_motion,self.coregister_vols]
+        self.pipeline = [
+            self.smooth,
+            self.correct_motion,
+            self.coregister_vols,
+            self.extract_brain
+            ]
 
-    def __call__(self, path=None):
-        if os.path.isdir(path):
-            return self.load_directory(path)
-        
-        else:
-            return self.load_sample(path)
+    def __call__(self, *args):
+        return self.load_sample(*args)
 
     
     def load_sample(self, fmri, mri):
@@ -28,10 +31,13 @@ class DataLoader():
         Loads an FMRI file, runs preprocessing and returns it as a numpy array
         """
 
+        as_nifti = lambda x : nib.Nifti1Image(x, np.eye(4))
+        fmri, mri = map(as_nifti, (fmri, mri))
+
         for op in self.pipeline:
             fmri, mri = op(fmri, mri)
 
-        return img
+        return (fmri, mri)
 
 
     def load_directory(self,path=None):
@@ -42,9 +48,15 @@ class DataLoader():
         for i in range(20):
             yield self.load_sample()
 
+    def smooth(self, fmri, mri):
+        return (fmri, mri)
 
     def extract_brain(self, fmri, mri):
-        pass
+        mask = nilearn.masking.compute_brain_mask(mri)
+        mri  = mri * mask
+        fmri = fmri * mask[..., None]
+        
+        return (fmri, mri)
 
     def correct_motion(self, fmri, mri):
         pass
