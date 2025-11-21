@@ -23,7 +23,7 @@ class DataLoader():
             load_sample(path)
 
     
-    def load_file(path=None):
+    def load_sample(path=None):
         """
         Loads an FMRI file, runs preprocessing and returns it as a numpy array
         """
