@@ -432,25 +432,6 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         # TODO: Add preprocessing implementation
         pass
 
-    def computeConnectivityMap(self, functionalVolume, seedPoint):
-        """
-        Compute functional connectivity map from a seed region.
-
-        TODO: We could try to implement connectivity analysis to identify brain regions that are
-        functionally connected to a region of interest. This will help with the robustness of our target localization
-        and visualization
-
-        Parameters:
-        - functionalVolume: The preprocessed BOLD fMRI volume
-        - seedPoint: The seed location [x, y, z] for connectivity analysis
-
-        Returns:
-        - Connectivity map volume
-        """
-        logging.info("Computing connectivity map (not yet implemented)...")
-        # TODO: Add connectivity analysis implementation
-        pass
-
     def identifyTargetRegions(self, analysisVolume, threshold=None):
         """
         Identify and rank potential DBS target regions based on analysis results.
