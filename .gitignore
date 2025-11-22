@@ -11,3 +11,4 @@ atlases/Buckner2011_7Networks_MNI152_FreeSurferConformed1mm_TightMask.nii.gz
 atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz
 atlases/Tian_Subcortex_S2_3T_1mm.nii.gz
 h5_downloader.py
+patient_summary.py
