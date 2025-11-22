@@ -41,16 +41,17 @@ def get_masks(fmri):
     subgenual_mask = binary_dilation(acc_mask, iterations=3)
     # Filter to anterior regions only
     z_coords = np.where(subgenual_mask)
-    if len(z_coords[2]) > 0:
-        anterior_threshold = np.percentile(z_coords[2], 60) 
-        subgenual_mask = subgenual_mask & (np.arange(subgenual_mask.shape[2])[None, None, :] > anterior_threshold)
-    roi_timeseries['Subgenual cingulate'] = apply_mask(fmri_data, subgenual_mask)
+
+    anterior_threshold = np.percentile(z_coords[2], 60) 
+    subgenual_mask = subgenual_mask & (np.arange(subgenual_mask.shape[2])[None, None, :] > anterior_threshold)
+
+    roi['Subgenual cingulate'] = (apply_mask(fmri_data, subgenual_mask), subgenual_mask)
 
     # Ventral capsule/ventral striatum
     # Use area around putamen
     vs_mask = (ho_data == 11) | (ho_data == 12) 
     vs_mask = binary_dilation(vs_mask, iterations=2)
-    roi_timeseries['Ventral striatum'] = apply_mask(fmri_data, vs_mask)
+    roi_timeseries['Ventral striatum'] = (apply_mask(fmri_data, vs_mask), vs_mask)
 
     # Inferior thalamic peduncle
     # Thalamus and brainstem
@@ -58,14 +59,12 @@ def get_masks(fmri):
 
     # Take ventral portion
     thal_coords = np.where(thal_mask)
-    if len(thal_coords[1]) > 0:
-        ventral_threshold = np.percentile(thal_coords[1], 40)
-        itp_mask = thal_mask & (np.arange(thal_mask.shape[1])[:, None, None] < ventral_threshold).T
-        itp_mask = binary_dilation(itp_mask, iterations=1)
 
-    else:
-        itp_mask = thal_mask
-    roi_timeseries['Inferior thalamic peduncle'] = apply_mask(fmri_data, itp_mask)
+    ventral_threshold = np.percentile(thal_coords[1], 40)
+    itp_mask = thal_mask & (np.arange(thal_mask.shape[1])[:, None, None] < ventral_threshold).T
+    itp_mask = binary_dilation(itp_mask, iterations=1)
+
+    roi_timeseries['Inferior thalamic peduncle'] = (apply_mask(fmri_data, itp_mask), itp_mask)
 
 
     # Medial forebrain bundle 
@@ -80,10 +79,10 @@ def get_masks(fmri):
     # Keep central/medial portions only
     x_center = mfb_mask.shape[0] // 2
     x_coords = np.arange(mfb_mask.shape[0])
-    medial_band = (np.abs(x_coords - x_center) < mfb_mask.shape[0] * 0.15)  # Central 30%
+    medial_band = (np.abs(x_coords - x_center) < mfb_mask.shape[0] * 0.15)
     mfb_mask = mfb_mask & medial_band[:, None, None]
 
-    roi_timeseries['Medial forebrain bundle'] = apply_mask(fmri_data, mfb_mask)
+    roi_timeseries['Medial forebrain bundle'] = (apply_mask(fmri_data, mfb_mask), mfb_mask)
 
     return (roi_timeseries)
 
