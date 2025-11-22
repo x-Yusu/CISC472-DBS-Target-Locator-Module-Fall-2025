@@ -66,11 +66,12 @@ class DataLoader():
         fmri_data = fmri.get_fdata()
 
         # Register the first fMRI frame to the structural mri
-        fmri_data[...,0] = self.register_vols(mri, fmri_data[...,0])
+        fmri_ref = self.register_vols(mri, np.mean(fmri_data,axis=3))
         
         # Register all fmris to the first fMRI
-        for i in range(1, fmri.shape[-1]):
-            fmri_data[...,i] = self.register_vols(fmri_data[...,0], fmri_data[...,i])
+        for i in range(0, fmri.shape[-1]):
+            if i < 10:
+                fmri_data[...,i] = self.register_vols(fmri_data[...,0], fmri_data[...,i])
 
         fmri = nib.Nifti1Image(fmri_data, np.eye(4))
 
