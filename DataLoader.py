@@ -71,7 +71,7 @@ class DataLoader():
         # Register all fmris to the first fMRI
         for i in range(0, fmri.shape[-1]):
             if i < 10:
-                fmri_data[...,i] = self.register_vols(fmri_data[...,0], fmri_data[...,i])
+                fmri_data[...,i] = self.register_vols(fmri_ref, fmri_data[...,i])
 
         fmri = nib.Nifti1Image(fmri_data, np.eye(4))
 
