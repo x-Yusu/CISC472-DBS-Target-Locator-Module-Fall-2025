@@ -20,7 +20,7 @@ def get_masks(fmri):
         fmri - The fmri time series
 
     Returns:
-        keys - Dict with keys as ROI names and values as 1D timeseries
+        keys - Dict with keys as ROI names and values as scalars
     """
 
     # Get fMRI data
@@ -65,7 +65,6 @@ def get_masks(fmri):
     itp_mask = binary_dilation(itp_mask, iterations=1)
 
     roi_timeseries['Inferior thalamic peduncle'] = (apply_mask(fmri_data, itp_mask), itp_mask)
-
 
     # Medial forebrain bundle 
     # This is between the thalamus and nucleous accumben, so use intersection of dilation
