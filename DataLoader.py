@@ -30,7 +30,6 @@ class DataLoader():
             self.normalize_to_template
             ]
 
-
     def __call__(self, *args):
         return self.load_sample(*args)
 
@@ -145,6 +144,7 @@ class DataLoader():
             mri = mri.get_fdata()
 
         return (fmri, mri)
+
     def extract_brain(self, fmri, mri):
         """ Masks out the brain from the background """
     
