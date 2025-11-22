@@ -310,7 +310,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             # ---------------------------------------------------------------
             resourceDir = self.get_module_resource_path()
             control_dir = os.path.join(resourceDir, 'HealthyControls')
-            atlas_path = os.path.join(resourceDir, 'Atlas', 'Master_DBS_Atlas.nii.gz')
+            atlas_path = os.path.join(resourceDir, 'Atlas', 'Tian_Subcortex_S2_3T_1mm.nii.gz')
             mni_template_path = os.path.join(resourceDir, 'Atlas', 'mni_icbm152_t1_tal_nlin_asym_09c.nii')
 
             # Consider checking if files exist and downloading them if missing (except Controls).
