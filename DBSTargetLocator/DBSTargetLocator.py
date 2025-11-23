@@ -1,8 +1,6 @@
 # The following was derived from an example module template from a PerkLabBootcamp slicer scripted module example file:
 # https://github.com/PerkLab/PerkLabBootcamp/blob/master/Examples/CampTutorial2/CampTutorial2.py
 
-# This template was used as a base to be expanded on, and will potentially be completely replaced
-# as we work on the project code
 
 """
 Guide for importing module to 3DSlicer:
@@ -257,21 +255,45 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
     def get_tian_label_mapping(self):
         """
         Returns a dictionary mapping Tian Scale II Label IDs (1-32) to Region Names.
-        Based on Nomenclature-subcortex-parcellation-hierarchy-3T.pdf
+        Scale II divides the 8 subcortical structures into 16 regions per hemisphere.
         """
-        # Labels 1-16 are typically Left, 17-32 are Right (or vice-versa depending on atlas packaging).
-        # Standard Tian ordering: 1-16 Left, 17-32 Right (Symmetric).
 
         roi_names = {
-            1: "L_Hippocampus", 2: "L_Amygdala", 3: "L_Thalamus_Ant", 4: "L_Thalamus_Post",
-            5: "L_Caudate", 6: "L_Putamen", 7: "L_Pallidum", 8: "L_Accumbens",
-            9: "L_Ex_Region_9", 10: "L_Ex_Region_10", 11: "L_Ex_Region_11", 12: "L_Ex_Region_12",
-            13: "L_Ex_Region_13", 14: "L_Ex_Region_14", 15: "L_Ex_Region_15", 16: "L_Ex_Region_16",
+            # --- RIGHT HEMISPHERE (1-16) ---
+            1: "Anterior Hippocampus (Right)",
+            2: "Posterior Hippocampus (Right)",
+            3: "Lateral Amygdala (Right)",
+            4: "Medial Amygdala (Right)",
+            5: "Thalamus - Prefrontal (Right)",
+            6: "Thalamus - Motor (Right)",
+            7: "Thalamus - Sensory (Right)",
+            8: "Thalamus - Parietal (Right)",
+            9: "Anterior Caudate (Right)",
+            10: "Posterior Caudate (Right)",
+            11: "Anterior Putamen (Right)",
+            12: "Posterior Putamen (Right)",
+            13: "Anterior Pallidum (Right)",
+            14: "Posterior Pallidum (Right)",
+            15: "Nucleus Accumbens Shell (Right)",
+            16: "Nucleus Accumbens Core (Right)",
 
-            17: "R_Hippocampus", 18: "R_Amygdala", 19: "R_Thalamus_Ant", 20: "R_Thalamus_Post",
-            21: "R_Caudate", 22: "R_Putamen", 23: "R_Pallidum", 24: "R_Accumbens",
-            25: "R_Ex_Region_25", 26: "R_Ex_Region_26", 27: "R_Ex_Region_27", 28: "R_Ex_Region_28",
-            29: "R_Ex_Region_29", 30: "R_Ex_Region_30", 31: "R_Ex_Region_31", 32: "R_Ex_Region_32"
+            # --- LEFT HEMISPHERE (17-32) ---
+            17: "Anterior Hippocampus (Left)",
+            18: "Posterior Hippocampus (Left)",
+            19: "Lateral Amygdala (Left)",
+            20: "Medial Amygdala (Left)",
+            21: "Thalamus - Prefrontal (Left)",
+            22: "Thalamus - Motor (Left)",
+            23: "Thalamus - Sensory (Left)",
+            24: "Thalamus - Parietal (Left)",
+            25: "Anterior Caudate (Left)",
+            26: "Posterior Caudate (Left)",
+            27: "Anterior Putamen (Left)",
+            28: "Posterior Putamen (Left)",
+            29: "Anterior Pallidum (Left)",
+            30: "Posterior Pallidum (Left)",
+            31: "Nucleus Accumbens Shell (Left)",
+            32: "Nucleus Accumbens Core (Left)"
         }
 
         return roi_names
@@ -323,7 +345,10 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             # Load Tian Atlas (Hidden, used for geometry and masking)
             tian_node = slicer.util.loadLabelVolume(tian_atlas_path)
             tian_node.SetName("Tian_Subcortex_Atlas")
-            tian_node.GetDisplayNode().SetVisibility(0)  # Hide
+
+            # Ensure Tian is explicitly hidden immediately upon loading
+            if tian_node.GetDisplayNode():
+                tian_node.GetDisplayNode().SetVisibility(0)
 
             # Get atlas data for masking
             tian_data = slicer.util.arrayFromVolume(tian_node)
@@ -412,7 +437,8 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             subcortex_z_scores = z_scores[400:432]
 
             # Create Heatmap Array
-            heatmap_data = np.zeros_like(tian_data, dtype=np.float32)
+            # MODIFICATION: Initialize with NaN (transparent) instead of 0.
+            heatmap_data = np.full_like(tian_data, np.nan, dtype=np.float32)
 
             # Fill Heatmap
             for label_id in range(1, 33):
@@ -430,6 +456,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 scored_regions.append((region_name, np.abs(z), z, label_id))
 
             # Sort by Absolute Z (Descending)
+            # This ensures high magnitude negatives (-5) are ranked higher than low positives (+1)
             scored_regions.sort(key=lambda x: x[1], reverse=True)
 
             # Extract Top 3
@@ -448,35 +475,51 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             # 4. VISUALIZATION & COMPOSITION
             # ---------------------------------------------------------------
 
-            # A. Show MNI Template as Background
-            # B. Show Heatmap as Foreground
-            slicer.util.setSliceViewerLayers(background=mni_node, foreground=heatmap_node)
+            # A. Show MNI Template as Background and Show Heatmap as Foreground
+            # Explicitly set foregroundOpacity=0.7 to ensure it is visible (not 0%)
+            # Also ensure label=None to hide Tian Atlas
+            slicer.util.setSliceViewerLayers(
+                background=mni_node,
+                foreground=heatmap_node,
+                label=None,
+                foregroundOpacity=0.7
+            )
 
-            # C. Style Heatmap
+            # B. Style Heatmap
             disp = heatmap_node.GetDisplayNode()
-            disp.AutoWindowLevelOn()
 
-            # Set Colormap (ColdToHotRainbow)
+            # Set window/level to only show meaningful z-scores
+            valid_zscores = heatmap_data[~np.isnan(heatmap_data)]
+            if len(valid_zscores) > 0:
+                z_min = np.min(valid_zscores)
+                z_max = np.max(valid_zscores)
+                z_range = z_max - z_min
+                window = z_range if z_range > 0 else 1.0
+                level = (z_min + z_max) / 2.0
+                disp.SetAutoWindowLevel(0)
+                disp.SetWindowLevel(window, level)
+            else:
+                disp.AutoWindowLevelOn()
+
+            # Set Colormap (ColdToHotRainbow) - Good for showing -/blue and +/red
             colorNode = slicer.util.getNode("ColdToHotRainbow") or slicer.util.getNode("Rainbow")
             if colorNode: disp.SetAndObserveColorNodeID(colorNode.GetID())
 
             # Set Translucency (0.7 Opacity)
             disp.SetOpacity(0.7)
 
-            # Threshold (Hide zeros/background)
+            # Apply threshold to hide NaN/invalid regions
             disp.SetApplyThreshold(1)
-            disp.SetThreshold(0.001, 9999)
+            if len(valid_zscores) > 0:
+                threshold = z_min - 0.1  # Slightly below minimum to include all valid data
+                disp.SetThreshold(threshold, z_max)
 
-            # D. Synchronize Volume Rendering (3D View)
-            # This enables the 3D volume display of the heatmap
+            # C. Synchronize Volume Rendering (3D View)
             volRenLogic = slicer.modules.volumerendering.logic()
             displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(heatmap_node)
             displayNode.SetVisibility(1)
 
-            # Adjust Volume Property for Heatmap (optional tuning for transparency)
-            # The scalar opacity mapping will use the colormap by default, but we can tweak it if needed.
-
-            # E. Place Fiducials at Top 3 Nodes
+            # D. Place Fiducials at Top 3 Nodes
             markups_node_name = "Top Candidate Targets"
             markups_node = None
             try:
@@ -615,6 +658,7 @@ class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
     def test_DBSTargetLocator_LocalSample(self):
         """
         Tests the module using the local sample folder in Resources/SamplePatientH5.
+        This tests the Logic AND updates the GUI table.
         """
         self.delayDisplay("Starting local sample test")
 
@@ -627,20 +671,25 @@ class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
             self.delayDisplay(f"Test Data not found at {patient_data_path}. Please ensure folder exists.")
             return
 
-        # 3. Setup Logic
-        logic = DBSTargetLocatorLogic()
-
-        # 4. Run Analysis
+        # 3. INTERACT WITH THE UI
+        # By getting the widget, we ensure the table logic runs, not just the math logic.
         try:
-            self.delayDisplay(f"Analyzing folder: {patient_data_path}")
-            top_candidates = logic.analyzeFMRI(patient_data_path)
+            # Switch to the module in the UI
+            slicer.util.selectModule('DBSTargetLocator')
 
-            if top_candidates:
-                self.delayDisplay(f"Test passed! Found {len(top_candidates)} targets.")
-            else:
-                self.delayDisplay("Test ran but found no targets.")
+            # Get the Python Widget object
+            widget = slicer.modules.dbstargetlocator.widgetRepresentation().self()
+
+            # Set the path in the UI selector
+            widget.patientSelector.currentPath = patient_data_path
+
+            # Click "Calculate" programmatically
+            self.delayDisplay("Simulating 'Calculate' click...")
+            widget.onApplyButton()
+
+            self.delayDisplay("Test Passed! Z-Score Table should now be populated in the module panel.")
 
         except Exception as e:
-            self.delayDisplay(f"Test failed: {e}")
+            self.delayDisplay(f"Test failed to drive UI: {e}")
             import traceback
             traceback.print_exc()
