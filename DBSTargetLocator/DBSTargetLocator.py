@@ -61,26 +61,24 @@ class DBSTargetLocator(ScriptedLoadableModule):
 
 def registerSampleData():
     """
-    Register OpenNeuro MRI and fMRI datasets (with JSON metadata)
-    for subject NDARINVAG023WG3 from ds005237.
+    Register OpenNeuro processed fMRI dataset (.h5) for subject NDARINVDG233EBR.
     """
     import SampleData
     import os
 
     iconsPath = os.path.join(os.path.dirname(__file__), "Resources/Icons")
 
-    # Anatomical MRI (T1w)
-    # Load the anatomical T1-weighted MRI scan with its metadata
-    anat_nii = "https://s3.amazonaws.com/openneuro.org/ds005237/sub-NDARINVAG023WG3/anat/sub-NDARINVAG023WG3_run-01_T1w.nii.gz"
+    # Processed fMRI connectivity matrix (.h5)
 
+    h5_url = "https://s3.amazonaws.com/openneuro.org/ds005237/fMRI_timeseries_clean_denoised_GSR_parcellated/NDAR_INVDG233EBR/task-restAP_run-01_bold_Atlas_hp2000_clean_GSR_parcellated.h5"
 
     SampleData.SampleDataLogic.registerCustomSampleDataSource(
         category="OpenNeuro ds005237",
-        sampleName="sub-NDARINVAG023WG3_T1w (Anatomical MRI)",
-        thumbnailFileName=os.path.join(iconsPath, "OpenNeuroAnat.png"),
-        uris=[anat_nii],
-        fileNames=["sub-NDARINVAG023WG3_run-01_T1w.nii.gz"],
-        nodeNames=["sub-NDARINVAG023WG3_T1w"],
+        sampleName="sub-NDARINVDG233EBR_restAP (H5)",
+        thumbnailFileName=os.path.join(iconsPath, "OpenNeurofMRI.png"),
+        uris=[h5_url],
+        fileNames=["task-restAP_run-01_bold_Atlas_hp2000_clean_GSR_parcellated.h5"],
+        nodeNames=["sub-NDARINVDG233EBR_restAP_h5"],
         checksums=None
     )
 
@@ -124,29 +122,13 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
         #
-        # Patient File Selector (H5)
+        # Patient Folder Selector (Dir)
         #
         self.patientSelector = ctk.ctkPathLineEdit()
-        self.patientSelector.filters = ctk.ctkPathLineEdit.Files
-        self.patientSelector.nameFilters = ["HDF5 Files (*.h5)"]
+        self.patientSelector.filters = ctk.ctkPathLineEdit.Dirs  # Changed to Directory Selector
         self.patientSelector.settingKey = 'DBSTargetLocator/PatientPath'
-        self.patientSelector.toolTip = "Select the processed .h5 timeseries file for the patient."
-        parametersFormLayout.addRow("Patient fMRI (.h5):", self.patientSelector)
-
-        #
-        # Patient Anatomical Selector (Volume)
-        #
-        self.anatomicalSelector = slicer.qMRMLNodeComboBox()
-        self.anatomicalSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-        self.anatomicalSelector.selectNodeUponCreation = True
-        self.anatomicalSelector.addEnabled = False
-        self.anatomicalSelector.removeEnabled = False
-        self.anatomicalSelector.noneEnabled = False
-        self.anatomicalSelector.showHidden = False
-        self.anatomicalSelector.showChildNodeTypes = False
-        self.anatomicalSelector.setMRMLScene(slicer.mrmlScene)
-        self.anatomicalSelector.toolTip = "Select the Patient's T1 Anatomical Volume (Loaded in Scene)."
-        parametersFormLayout.addRow("Patient Anatomy (T1):", self.anatomicalSelector)
+        self.patientSelector.toolTip = "Select the folder containing the patient's processed .h5 files."
+        parametersFormLayout.addRow("Patient Data Folder:", self.patientSelector)
 
         #
         # Dependency Management Area
@@ -164,6 +146,19 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.applyButton.enabled = False
         parametersFormLayout.addRow(self.applyButton)
 
+        #
+        # Results Area
+        #
+        self.resultsCollapsibleButton = ctk.ctkCollapsibleButton()
+        self.resultsCollapsibleButton.text = "Top Candidates"
+        self.layout.addWidget(self.resultsCollapsibleButton)
+        self.resultsLayout = qt.QVBoxLayout(self.resultsCollapsibleButton)
+
+        self.resultsTable = qt.QTableWidget()
+        self.resultsTable.setColumnCount(3)
+        self.resultsTable.setHorizontalHeaderLabels(["Rank", "Region", "Z-Score"])
+        self.resultsLayout.addWidget(self.resultsTable)
+
         # Add vertical spacer
         self.layout.addStretch(1)
 
@@ -172,7 +167,6 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         # Connect UI elements - wire up all the buttons and controls to their callback functions
         self.patientSelector.connect("currentPathChanged(const QString &)", self.onSelect)
-        self.anatomicalSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
         self.applyButton.connect('clicked(bool)', self.onApplyButton)
         self.installDepsButton.connect('clicked(bool)', self.onInstallDeps)
 
@@ -191,8 +185,7 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         Enable the Apply button only if all inputs are ready.
         """
         self.applyButton.enabled = (
-                self.patientSelector.currentPath != "" and
-                self.anatomicalSelector.currentNode() is not None
+                self.patientSelector.currentPath != ""
         )
 
     def onInstallDeps(self):
@@ -212,10 +205,17 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
         try:
             patient_path = self.patientSelector.currentPath
-            anatomical_node = self.anatomicalSelector.currentNode()
 
             # Run the analysis
-            self.logic.analyzeFMRI(patient_path, anatomical_node)
+            results = self.logic.analyzeFMRI(patient_path)
+
+            # Populate Results Table
+            if results:
+                self.resultsTable.setRowCount(len(results))
+                for i, (region, score) in enumerate(results):
+                    self.resultsTable.setItem(i, 0, qt.QTableWidgetItem(str(i + 1)))
+                    self.resultsTable.setItem(i, 1, qt.QTableWidgetItem(region))
+                    self.resultsTable.setItem(i, 2, qt.QTableWidgetItem(f"{score:.4f}"))
 
             # Show completion message
             slicer.util.infoDisplay("fMRI analysis completed successfully!")
@@ -254,49 +254,38 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         moduleDir = os.path.dirname(__file__)
         return os.path.join(moduleDir, 'Resources')
 
-    def registerPatientToMNI(self, fixedMNI, movingPatient):
+    def get_tian_label_mapping(self):
         """
-        1. Register Patient (Moving) to MNI (Fixed).
-        2. Create a transform node.
-        3. Return the transform node (PatientToMNI).
+        Returns a dictionary mapping Tian Scale II Label IDs (1-32) to Region Names.
+        Based on Nomenclature-subcortex-parcellation-hierarchy-3T.pdf
         """
-        logging.info("Starting Registration (BRAINSFit)...")
+        # Labels 1-16 are typically Left, 17-32 are Right (or vice-versa depending on atlas packaging).
+        # Standard Tian ordering: 1-16 Left, 17-32 Right (Symmetric).
 
-        # Create transform node
-        transformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLLinearTransformNode", "PatientToMNI_Transform")
+        roi_names = {
+            1: "L_Hippocampus", 2: "L_Amygdala", 3: "L_Thalamus_Ant", 4: "L_Thalamus_Post",
+            5: "L_Caudate", 6: "L_Putamen", 7: "L_Pallidum", 8: "L_Accumbens",
+            9: "L_Ex_Region_9", 10: "L_Ex_Region_10", 11: "L_Ex_Region_11", 12: "L_Ex_Region_12",
+            13: "L_Ex_Region_13", 14: "L_Ex_Region_14", 15: "L_Ex_Region_15", 16: "L_Ex_Region_16",
 
-        # Setup BRAINSFit parameters
-        # need to tune these parameters if registration is poor (e.g., increase samplingPercentage)
-        parameters = {
-            "fixedVolume": fixedMNI.GetID(),
-            "movingVolume": movingPatient.GetID(),
-            "linearTransform": transformNode.GetID(),  # Output transform
-            "useRigid": True,
-            "useAffine": True,
-            "useBSpline": False,
-            "samplingPercentage": 0.02,
-            "initializeTransformMode": "useMomentsAlign"
+            17: "R_Hippocampus", 18: "R_Amygdala", 19: "R_Thalamus_Ant", 20: "R_Thalamus_Post",
+            21: "R_Caudate", 22: "R_Putamen", 23: "R_Pallidum", 24: "R_Accumbens",
+            25: "R_Ex_Region_25", 26: "R_Ex_Region_26", 27: "R_Ex_Region_27", 28: "R_Ex_Region_28",
+            29: "R_Ex_Region_29", 30: "R_Ex_Region_30", 31: "R_Ex_Region_31", 32: "R_Ex_Region_32"
         }
 
-        # Run CLI module
-        brainsFit = slicer.modules.brainsfit
-        cliNode = slicer.cli.runSync(brainsFit, None, parameters)
+        return roi_names
 
-        if cliNode.GetStatus() & cliNode.ErrorsMask:
-            errorMsg = cliNode.GetErrorText()
-            raise RuntimeError(f"BRAINSFit registration failed: {errorMsg}")
-
-        logging.info("Registration complete. Transform created.")
-        return transformNode
-
-    def analyzeFMRI(self, patient_h5_path, anatomicalVolume):
+    def analyzeFMRI(self, patient_folder_path):
         """
         Perform fMRI analysis to identify candidate DBS target locations.
+        Returns list of (RegionName, ZScore) tuples for top 3 candidates.
+
+        Accepts a folder path, scans for .h5 files, and averages them if multiple are found.
         """
 
         logging.info("Starting fMRI analysis...")
-        logging.info(f"Anatomical volume: {anatomicalVolume.GetName()}")
-        logging.info(f"Patient Data: {patient_h5_path}")
+        logging.info(f"Patient Data Folder: {patient_folder_path}")
 
         import pandas as pd
         import numpy as np
@@ -304,45 +293,69 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
         slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
 
+        top_candidates = []
+
         try:
             # ---------------------------------------------------------------
             # 0. SETUP PATHS
             # ---------------------------------------------------------------
             resourceDir = self.get_module_resource_path()
             control_dir = os.path.join(resourceDir, 'HealthyControls')
-            atlas_path = os.path.join(resourceDir, 'Atlas', 'Tian_Subcortex_S2_3T_1mm.nii.gz')
+
+            # Use standard MNI template as background
             mni_template_path = os.path.join(resourceDir, 'Atlas', 'mni_icbm152_t1_tal_nlin_asym_09c.nii')
 
-            # Consider checking if files exist and downloading them if missing (except Controls).
+            # Use Tian Scale II Subcortical Atlas for masking
+            tian_atlas_path = os.path.join(resourceDir, 'Atlas', 'Tian_Subcortex_S2_3T_1mm.nii.gz')
+
             if not os.path.exists(control_dir): raise FileNotFoundError(f"Healthy Controls not found at {control_dir}.")
-            if not os.path.exists(atlas_path): raise FileNotFoundError(f"Master Atlas not found at {atlas_path}.")
             if not os.path.exists(mni_template_path): raise FileNotFoundError(
                 f"MNI Template not found at {mni_template_path}.")
+            if not os.path.exists(tian_atlas_path): raise FileNotFoundError(
+                f"Tian Atlas not found at {tian_atlas_path}.")
 
             # ---------------------------------------------------------------
-            # 1. LOAD ATLAS & MNI TEMPLATE
+            # 1. LOAD MNI TEMPLATE (BACKGROUND)
             # ---------------------------------------------------------------
-            # Load Master Atlas
-            # NOTE currently Atlas is corrupt ("huge red regions"), visual alignment will fail.
-            # Verify atlas dimensions match MNI template dimensions here.
-            atlas_node = slicer.util.loadLabelVolume(atlas_path)
-            atlas_node.SetName("Master_Atlas_MNI")
-            atlas_data = slicer.util.arrayFromVolume(atlas_node)
-
-            # Load MNI Template
             mni_node = slicer.util.loadVolume(mni_template_path)
-            mni_node.SetName("MNI_Template_Ref")
+            mni_node.SetName("Standard_MNI_Template")
 
-            # Hide them initially
-            atlas_node.GetDisplayNode().SetVisibility(0)
-            mni_node.GetDisplayNode().SetVisibility(0)
+            # Load Tian Atlas (Hidden, used for geometry and masking)
+            tian_node = slicer.util.loadLabelVolume(tian_atlas_path)
+            tian_node.SetName("Tian_Subcortex_Atlas")
+            tian_node.GetDisplayNode().SetVisibility(0)  # Hide
+
+            # Get atlas data for masking
+            tian_data = slicer.util.arrayFromVolume(tian_node)
 
             # ---------------------------------------------------------------
-            # 2. COMPUTE Z-SCORES (On MNI Atlas Grid)
+            # 2. COMPUTE Z-SCORES (On 434-Region Vector)
             # ---------------------------------------------------------------
-            # Load Patient Metric (With Auto-merging AP/PA)
-            logging.info(f"Loading Patient fMRI: {patient_h5_path}")
-            patient_metric = self._load_and_compute_metric(patient_h5_path, pd, h5py, np)
+            # Load Patient Metric - Modified to handle folder input
+            logging.info(f"Scanning folder: {patient_folder_path}")
+
+            patient_files = [os.path.join(patient_folder_path, f) for f in os.listdir(patient_folder_path)
+                             if f.endswith('.h5') and ('rest' in f)]
+
+            if not patient_files:
+                raise ValueError(f"No resting state .h5 files found in {patient_folder_path}")
+
+            logging.info(f"Found {len(patient_files)} valid patient files. Averaging...")
+
+            # Compute average metric for patient
+            patient_metrics = []
+            for p_file in patient_files:
+                try:
+                    metric = self._compute_single_file_metric(p_file, pd, h5py, np)
+                    patient_metrics.append(metric)
+                except Exception as e:
+                    logging.warning(f"Failed to load patient file {p_file}: {e}")
+
+            if not patient_metrics:
+                raise ValueError("Failed to compute metrics for any patient files.")
+
+            # Average the metrics from all found files (AP, PA, etc)
+            patient_metric = np.mean(np.array(patient_metrics), axis=0)
 
             # Load/Calc Baseline
             baseline_file = os.path.join(control_dir, 'baseline_stats.npy')
@@ -364,15 +377,17 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 processed_subjects = set()
 
                 for i, c_path in enumerate(control_files):
-                    if os.path.normpath(c_path) == os.path.normpath(patient_h5_path): continue
-
-                    parent_folder = os.path.dirname(c_path)
-                    if parent_folder in processed_subjects:
+                    # Check if this control file is inside the patient folder we just selected
+                    # To avoid using patient as control if user points to same dir
+                    if os.path.commonpath([patient_folder_path]) == os.path.commonpath([patient_folder_path, c_path]):
                         continue
 
+                    parent_folder = os.path.dirname(c_path)
+                    if parent_folder in processed_subjects: continue
+
                     try:
-                        # The helper function auto-merges AP and PA if it finds the partner
-                        c_metric = self._load_and_compute_metric(c_path, pd, h5py, np)
+                        # Use the auto-merge helper for controls to keep logic simple there
+                        c_metric = self._load_and_compute_metric_auto_merge(c_path, pd, h5py, np)
                         control_metrics.append(c_metric)
                         processed_subjects.add(parent_folder)
                     except Exception as e:
@@ -383,85 +398,87 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 ctrl_std = np.std(control_metrics, axis=0)
 
                 np.save(baseline_file, {'mean': ctrl_mean, 'std': ctrl_std})
-                logging.info(f"*** GENERATED NEW BASELINE ***")
-                logging.info(f"Saved to: {baseline_file}")
-                logging.info(f"Total Unique Controls Processed: {len(control_metrics)}")
+                logging.info(f"Generated baseline from {len(control_metrics)} controls.")
 
             # Calculate Z-Scores
             ctrl_std[ctrl_std == 0] = 1e-9
             z_scores = (patient_metric - ctrl_mean) / ctrl_std
             z_scores = np.nan_to_num(z_scores)
 
-            max_z = np.max(z_scores)
+            # ---------------------------------------------------------------
+            # 3. CREATE SUBCORTICAL HEATMAP & FIND TOP 3
+            # ---------------------------------------------------------------
+            # We only care about indices 400-431 (The 32 Subcortical Regions)
+            subcortex_z_scores = z_scores[400:432]
 
-            # Create Heatmap in MNI Space
-            heatmap_data = np.zeros_like(atlas_data, dtype=np.float32)
-            unique_labels = np.unique(atlas_data)
+            # Create Heatmap Array
+            heatmap_data = np.zeros_like(tian_data, dtype=np.float32)
 
-            # TODO: Ensure label indices (1-434) match the z_score array indices (0-433).
-            # If atlas has labels > 434, this will silently skip them. Consider adding a warning.
-            for label in unique_labels:
-                if label == 0: continue
-                if label <= len(z_scores):
-                    score = z_scores[int(label) - 1]
-                    heatmap_data[atlas_data == label] = score
+            # Fill Heatmap
+            for label_id in range(1, 33):
+                z_val = z_scores[400 + label_id - 1]
+                heatmap_data[tian_data == label_id] = z_val
 
-            # Create MNI Heatmap Node
-            heatmap_mni = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Heatmap_MNI_Space")
-            heatmap_mni.CreateDefaultDisplayNodes()
-            heatmap_mni.CopyOrientation(atlas_node)
-            slicer.util.updateVolumeFromArray(heatmap_mni, heatmap_data)
+            # Find Top 3 Absolute Z-Scores
+            # Create list of (index, abs_z, real_z)
+            scored_regions = []
+            label_map = self.get_tian_label_mapping()
 
-            # Hide intermediate MNI heatmap
-            heatmap_mni.GetDisplayNode().SetVisibility(0)
+            for i, z in enumerate(subcortex_z_scores):
+                label_id = i + 1
+                region_name = label_map.get(label_id, f"Region_{label_id}")
+                scored_regions.append((region_name, np.abs(z), z, label_id))
+
+            # Sort by Absolute Z (Descending)
+            scored_regions.sort(key=lambda x: x[1], reverse=True)
+
+            # Extract Top 3
+            for i in range(min(3, len(scored_regions))):
+                name, abs_z, real_z, lbl_id = scored_regions[i]
+                top_candidates.append((name, real_z))
+                logging.info(f"Rank {i + 1}: {name} | Z-Score: {real_z:.4f}")
+
+            # Create Heatmap Node
+            heatmap_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Subcortical_Z_Score_Map")
+            heatmap_node.CreateDefaultDisplayNodes()
+            heatmap_node.CopyOrientation(tian_node)
+            slicer.util.updateVolumeFromArray(heatmap_node, heatmap_data)
 
             # ---------------------------------------------------------------
-            # 3. REGISTER & WARP (INVERSE: MNI -> PATIENT)
-            # ---------------------------------------------------------------
-            # Step A: Register Patient -> MNI to get the transform
-            # NOTE: Currently the registration fails (poor alignment), the heatmap is offset and not displaying correctly.
-            # Check output log for BRAINSFit errors.
-            patient_to_mni_transform = self.registerPatientToMNI(mni_node, anatomicalVolume)
-
-            # Step B: Invert Transform (MNI -> Patient)
-            patient_to_mni_transform.Inverse()
-            patient_to_mni_transform.SetName("MNI_To_Patient_Transform")
-
-            # Step C: Harden Transform on Heatmap
-            heatmap_native = slicer.modules.volumes.logic().CloneVolume(heatmap_mni, "DBS_Target_Heatmap_Native")
-            heatmap_native.SetAndObserveTransformNodeID(patient_to_mni_transform.GetID())
-            slicer.vtkSlicerTransformLogic().hardenTransform(heatmap_native)
-
-            # ---------------------------------------------------------------
-            # 4. VISUALIZATION & TARGETING
+            # 4. VISUALIZATION & COMPOSITION
             # ---------------------------------------------------------------
 
-            # A. Show Patient Anatomy as Background
-            slicer.util.setSliceViewerLayers(background=anatomicalVolume, foreground=heatmap_native)
+            # A. Show MNI Template as Background
+            # B. Show Heatmap as Foreground
+            slicer.util.setSliceViewerLayers(background=mni_node, foreground=heatmap_node)
 
-            # B. Style Heatmap
-            disp = heatmap_native.GetDisplayNode()
+            # C. Style Heatmap
+            disp = heatmap_node.GetDisplayNode()
             disp.AutoWindowLevelOn()
+
+            # Set Colormap (ColdToHotRainbow)
             colorNode = slicer.util.getNode("ColdToHotRainbow") or slicer.util.getNode("Rainbow")
             if colorNode: disp.SetAndObserveColorNodeID(colorNode.GetID())
-            disp.SetOpacity(0.6)
 
-            # C. Find Max Z in NATIVE Space
-            native_data = slicer.util.arrayFromVolume(heatmap_native)
-            max_indices = np.unravel_index(np.argmax(native_data), native_data.shape)
+            # Set Translucency (0.7 Opacity)
+            disp.SetOpacity(0.7)
 
-            # Convert IJK (Native) -> RAS (Native Scanner Space)
-            ijk_point = [max_indices[2], max_indices[1], max_indices[0]]
-            ijkToRas = vtk.vtkMatrix4x4()
-            heatmap_native.GetIJKToRASMatrix(ijkToRas)
+            # Threshold (Hide zeros/background)
+            disp.SetApplyThreshold(1)
+            disp.SetThreshold(0.001, 9999)
 
-            ras_homog = ijkToRas.MultiplyPoint([ijk_point[0], ijk_point[1], ijk_point[2], 1.0])
-            ras_point = ras_homog[:3]
+            # D. Synchronize Volume Rendering (3D View)
+            # This enables the 3D volume display of the heatmap
+            volRenLogic = slicer.modules.volumerendering.logic()
+            displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(heatmap_node)
+            displayNode.SetVisibility(1)
 
-            # D. Place Fiducial
-            markups_node_name = "Candidate Target"
+            # Adjust Volume Property for Heatmap (optional tuning for transparency)
+            # The scalar opacity mapping will use the colormap by default, but we can tweak it if needed.
+
+            # E. Place Fiducials at Top 3 Nodes
+            markups_node_name = "Top Candidate Targets"
             markups_node = None
-
             try:
                 markups_node = slicer.util.getNode(markups_node_name)
             except:
@@ -471,27 +488,39 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 markups_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", markups_node_name)
 
             markups_node.RemoveAllControlPoints()
-            markups_node.AddControlPoint(ras_point[0], ras_point[1], ras_point[2])
-            markups_node.SetNthControlPointLabel(0, f"Max Z: {max_z:.2f}")
 
-            # E. Visual Skull Strip (On Native Anatomy)
-            disp_anat = anatomicalVolume.GetDisplayNode()
-            disp_anat.AutoWindowLevelOn()
-            disp_anat.SetApplyThreshold(1)
-            anat_arr = slicer.util.arrayFromVolume(anatomicalVolume)
-            # NOTE: Adjust this 0.05 threshold if the brain looks too eroded or the skull is still visible.
-            disp_anat.SetThreshold(np.max(anat_arr) * 0.05, np.max(anat_arr))
+            # Limit to available regions if fewer than 3
+            count = min(3, len(scored_regions))
 
-            # F. Center View
-            layoutManager = slicer.app.layoutManager()
-            threeDWidget = layoutManager.threeDWidget(0)
-            threeDView = threeDWidget.threeDView()
-            threeDView.resetFocalPoint()
+            for i in range(count):
+                top_name, _, top_z, top_label = scored_regions[i]
 
-            for sliceNode in slicer.util.getNodesByClass("vtkMRMLSliceNode"):
-                sliceNode.JumpSlice(ras_point[0], ras_point[1], ras_point[2])
+                region_mask = (tian_data == top_label)
+                if np.any(region_mask):
+                    coords = np.argwhere(region_mask)
+                    center_ijk = coords.mean(axis=0)
+                    ijk_point = [center_ijk[2], center_ijk[1], center_ijk[0]]
+
+                    ijkToRas = vtk.vtkMatrix4x4()
+                    tian_node.GetIJKToRASMatrix(ijkToRas)
+                    ras_homog = ijkToRas.MultiplyPoint([ijk_point[0], ijk_point[1], ijk_point[2], 1.0])
+                    ras_point = ras_homog[:3]
+
+                    # Add Control Point
+                    pid = markups_node.AddControlPoint(ras_point[0], ras_point[1], ras_point[2])
+                    markups_node.SetNthControlPointLabel(pid, f"{i + 1}: {top_name}\nZ: {top_z:.2f}")
+
+                    # Center View on the #1 candidate
+                    if i == 0:
+                        layoutManager = slicer.app.layoutManager()
+                        threeDWidget = layoutManager.threeDWidget(0)
+                        threeDView = threeDWidget.threeDView()
+                        threeDView.resetFocalPoint()
+                        for sliceNode in slicer.util.getNodesByClass("vtkMRMLSliceNode"):
+                            sliceNode.JumpSlice(ras_point[0], ras_point[1], ras_point[2])
 
             logging.info('Processing completed')
+            return top_candidates
 
         except Exception as e:
             logging.error(f"Error in logic: {e}")
@@ -499,10 +528,29 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         finally:
             slicer.app.restoreOverrideCursor()
 
-    def _load_and_compute_metric(self, h5_path, pd, h5py, np):
+    def _compute_single_file_metric(self, path, pd, h5py, np):
         """
-        Helper to load .h5 file and calculate Global Connectivity Strength.
-        AUTO-MERGE: Looks for matching AP/PA file and averages connectivity.
+        Computes Global Connectivity Strength for a single file.
+        No averaging logic.
+        """
+
+        def get_data(p):
+            try:
+                df = pd.read_hdf(p)
+                return df.values
+            except:
+                with h5py.File(p, 'r') as f:
+                    key = list(f.keys())[0]
+                    return f[key][:]
+
+        data = get_data(path)
+        if data.shape[0] == 434: data = data.T
+        fc = pd.DataFrame(data).corr().values
+        return np.mean(np.abs(fc), axis=1)
+
+    def _load_and_compute_metric_auto_merge(self, h5_path, pd, h5py, np):
+        """
+        Legacy Helper for Controls: Looks for matching AP/PA file and averages connectivity.
         """
 
         def get_data(path):
@@ -516,8 +564,6 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
         # Load Primary File
         data1 = get_data(h5_path)
-        # TODO: Validate that data1 shape matches expected region count (434).
-        # If not, the atlas mapping will be misaligned.
         if data1.shape[0] == 434: data1 = data1.T
         fc1 = pd.DataFrame(data1).corr().values
 
@@ -537,8 +583,6 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                     data2 = get_data(partner_path)
                     if data2.shape[0] == 434: data2 = data2.T
                     fc2 = pd.DataFrame(data2).corr().values
-
-                    # Average the Correlation Matrices
                     fc_matrix = (fc1 + fc2) / 2.0
                 except Exception as e:
                     logging.warning(f"   Failed to load partner {partner_name}: {e}. Using single scan.")
@@ -548,7 +592,6 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         else:
             fc_matrix = fc1
 
-        # Metric: Mean Absolute Connectivity (Global Strength)
         metric = np.mean(np.abs(fc_matrix), axis=1)
         return metric
 
@@ -560,81 +603,44 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
     """
     This is the test case for our scripted module.
-    Tests verify that the module loads data correctly and performs basic operations.
     """
 
     def setUp(self):
-        """
-        Reset the state before each test.
-        Clearing the scene ensures tests are independent and repeatable.
-        """
         slicer.mrmlScene.Clear()
 
     def runTest(self):
-        """
-        Run the test suite.
-        We can add multiple test methods here as our module grows.
-        """
         self.setUp()
-        self.test_DBSTargetLocator_Workflow()
+        self.test_DBSTargetLocator_LocalSample()
 
-    def test_DBSTargetLocator_Workflow(self):
+    def test_DBSTargetLocator_LocalSample(self):
         """
-        Test that the basic analysis workflow runs.
+        Tests the module using the local sample folder in Resources/SamplePatientH5.
         """
-        self.delayDisplay("Starting workflow test")
+        self.delayDisplay("Starting local sample test")
 
-        import numpy as np
-        import pandas as pd
-        import nibabel as nib
+        # 1. Locate the sample data in Resources
+        moduleDir = os.path.dirname(__file__)
+        patient_data_path = os.path.join(moduleDir, 'Resources', 'SamplePatientH5', 'NDAR_INVAP729WCD')
 
-        tempDir = slicer.app.temporaryPath
-        patient_path = os.path.join(tempDir, "test_patient.h5")
+        # 2. Check if it exists
+        if not os.path.exists(patient_data_path):
+            self.delayDisplay(f"Test Data not found at {patient_data_path}. Please ensure folder exists.")
+            return
 
-        resource_dir = os.path.join(tempDir, 'Resources')
-        control_dir = os.path.join(resource_dir, 'HealthyControls')
-        atlas_dir = os.path.join(resource_dir, 'Atlas')
-
-        os.makedirs(control_dir, exist_ok=True)
-        os.makedirs(atlas_dir, exist_ok=True)
-
-        # Note: These dummy files are placeholders.
-        # Real tests should use small, valid NIfTI and H5 samples included in the repo.
-        atlas_path = os.path.join(atlas_dir, 'Master_DBS_Atlas.nii.gz')
-        mni_path = os.path.join(atlas_dir, 'mni_icbm152_t1_tal_nlin_asym_09c.nii')
-
-        n_regions = 434
-        n_time = 10
-
-        p_data = np.random.rand(n_time, n_regions)
-        pd.DataFrame(p_data).to_hdf(patient_path, key='data')
-
-        for i in range(3):
-            c_data = np.random.rand(n_time, n_regions)
-            pd.DataFrame(c_data).to_hdf(os.path.join(control_dir, f"ctrl_{i}.h5"), key='data')
-
-        atlas_data = np.random.randint(0, n_regions + 1, (20, 20, 20)).astype(np.int32)
-        affine = np.eye(4)
-        img = nib.Nifti1Image(atlas_data, affine)
-        nib.save(img, atlas_path)
-
-        mni_data = np.random.randint(0, 255, (20, 20, 20)).astype(np.uint8)
-        mni_img = nib.Nifti1Image(mni_data, affine)
-        nib.save(mni_img, mni_path)
-
-        anat_data = np.random.randint(0, 255, (20, 20, 20)).astype(np.uint8)
-        anatomicalVolume = slicer.util.addVolumeFromArray(anat_data)
-
+        # 3. Setup Logic
         logic = DBSTargetLocatorLogic()
 
-        original_get_resource = logic.get_module_resource_path
-        logic.get_module_resource_path = lambda: resource_dir
-
+        # 4. Run Analysis
         try:
-            logic.analyzeFMRI(patient_path, anatomicalVolume)
-            self.delayDisplay("Test passed!")
+            self.delayDisplay(f"Analyzing folder: {patient_data_path}")
+            top_candidates = logic.analyzeFMRI(patient_data_path)
+
+            if top_candidates:
+                self.delayDisplay(f"Test passed! Found {len(top_candidates)} targets.")
+            else:
+                self.delayDisplay("Test ran but found no targets.")
+
         except Exception as e:
             self.delayDisplay(f"Test failed: {e}")
-            raise e
-        finally:
-            logic.get_module_resource_path = original_get_resource
+            import traceback
+            traceback.print_exc()
