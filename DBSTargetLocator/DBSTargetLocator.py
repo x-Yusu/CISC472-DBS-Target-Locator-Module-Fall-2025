@@ -386,6 +386,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             patient_metric = np.mean(np.array(patient_metrics), axis=0)
 
             # Load/Calc Baseline
+            distr_file = os.path.join(control_dir, 'baseline_dist.npy')
             baseline_file = os.path.join(control_dir, 'baseline_stats.npy')
 
             if os.path.exists(baseline_file):
@@ -425,6 +426,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 ctrl_mean = np.mean(control_metrics, axis=0)
                 ctrl_std = np.std(control_metrics, axis=0)
 
+                np.save(distr_file, control_metrics)
                 np.save(baseline_file, {'mean': ctrl_mean, 'std': ctrl_std})
                 logging.info(f"Generated baseline from {len(control_metrics)} controls.")
 
