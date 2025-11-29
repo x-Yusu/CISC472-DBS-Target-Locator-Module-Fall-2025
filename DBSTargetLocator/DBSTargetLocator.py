@@ -193,9 +193,10 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         """
         self.removeObservers()
 
-    def onSelect(self):
+    def onSelect(self, path=None):
         """
         Enable the Apply button only if all inputs are ready.
+        Takes 'path' argument to handle the signal from ctkPathLineEdit.
         """
         self.applyButton.enabled = (
                 self.patientSelector.currentPath != "" and
@@ -221,8 +222,12 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             patient_path = self.patientSelector.currentPath
             anat_path = self.anatSelector.currentPath
 
+            logging.info(f"Apply button clicked with paths: {patient_path}, {anat_path}")
+
             # Run the analysis
             results = self.logic.analyzeFMRI(patient_path, anat_path)
+
+            logging.info(f"Analysis returned {len(results) if results else 0} results")
 
             # Populate Results Table
             if results:
@@ -413,8 +418,11 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 for i, c_path in enumerate(control_files):
                     # Check if this control file is inside the patient folder we just selected
                     # To avoid using patient as control if user points to same dir
-                    if os.path.commonpath([patient_folder_path]) == os.path.commonpath([patient_folder_path, c_path]):
-                        continue
+                    try:
+                        if patient_folder_path in c_path or c_path.startswith(patient_folder_path):
+                            continue
+                    except:
+                        pass
 
                     parent_folder = os.path.dirname(c_path)
                     if parent_folder in processed_subjects: continue
