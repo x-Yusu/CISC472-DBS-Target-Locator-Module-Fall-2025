@@ -143,20 +143,38 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         parametersFormLayout.addRow("Patient T1 Scan:", self.anatSelector)
 
         #
-        # Dependency Management Area
-        #
-        self.installDepsButton = qt.QPushButton("Install Python Dependencies")
-        self.installDepsButton.toolTip = "Click this if you get import errors (installs pandas, h5py)."
-        self.installDepsButton.enabled = True
-        parametersFormLayout.addRow(self.installDepsButton)
-
-        #
         # Apply Button
         #
         self.applyButton = qt.QPushButton("Calculate DBS Candidate Sites and Register")
         self.applyButton.toolTip = "Run the DBS candidate site analysis and register to patient anatomy."
         self.applyButton.enabled = False
         parametersFormLayout.addRow(self.applyButton)
+
+        #
+        # Developer and Testing Area (Collapsible, Default Collapsed)
+        #
+        self.devCollapsibleButton = ctk.ctkCollapsibleButton()
+        self.devCollapsibleButton.text = "Developer and Testing Tools"
+        self.devCollapsibleButton.collapsed = True  # Hidden by default
+        self.layout.addWidget(self.devCollapsibleButton)
+
+        devFormLayout = qt.QFormLayout(self.devCollapsibleButton)
+
+        #
+        # Load Test Data Button (Moved here)
+        #
+        self.loadTestButton = qt.QPushButton("Load Test Data")
+        self.loadTestButton.toolTip = "Automatically load the sample data from Resources and run the analysis."
+        self.loadTestButton.enabled = True
+        devFormLayout.addRow(self.loadTestButton)
+
+        #
+        # Dependency Management Button (Moved here)
+        #
+        self.installDepsButton = qt.QPushButton("Install Python Dependencies")
+        self.installDepsButton.toolTip = "Click this if you get import errors (installs pandas, h5py)."
+        self.installDepsButton.enabled = True
+        devFormLayout.addRow(self.installDepsButton)
 
         #
         # Results Area
@@ -180,6 +198,7 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Connect UI elements - wire up all the buttons and controls to their callback functions
         self.patientSelector.connect("currentPathChanged(const QString &)", self.onSelect)
         self.anatSelector.connect("currentPathChanged(const QString &)", self.onSelect)
+        self.loadTestButton.connect('clicked(bool)', self.onLoadTestData)
         self.applyButton.connect('clicked(bool)', self.onApplyButton)
         self.installDepsButton.connect('clicked(bool)', self.onInstallDeps)
 
@@ -202,6 +221,35 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 self.patientSelector.currentPath != "" and
                 self.anatSelector.currentPath != ""
         )
+
+    def onLoadTestData(self):
+        """
+        Loads the test data found in the module's Resources folder and triggers the analysis.
+        """
+        try:
+            # Locate the sample data in Resources
+            moduleDir = os.path.dirname(__file__)
+            patient_data_folder = os.path.join(moduleDir, 'Resources', 'SamplePatientH5', 'NDAR_INVAP729WCD')
+            patient_anat_file = os.path.join(moduleDir, 'Resources', 'SamplePatientH5',
+                                             'sub-NDARINVAP729WCD_run-01_T1w.nii.gz')
+
+            if not os.path.exists(patient_data_folder):
+                slicer.util.errorDisplay(f"Test Data Folder not found at {patient_data_folder}.")
+                return
+
+            if not os.path.exists(patient_anat_file):
+                slicer.util.errorDisplay(f"Test Anatomical File not found at {patient_anat_file}.")
+                return
+
+            # Set inputs in the GUI
+            self.patientSelector.currentPath = patient_data_folder
+            self.anatSelector.currentPath = patient_anat_file
+
+            # Run the apply function
+            self.onApplyButton()
+
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to load test data: {e}")
 
     def onInstallDeps(self):
         """
@@ -235,7 +283,8 @@ class DBSTargetLocatorWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
                 for i, (region, score) in enumerate(results):
                     self.resultsTable.setItem(i, 0, qt.QTableWidgetItem(str(i + 1)))
                     self.resultsTable.setItem(i, 1, qt.QTableWidgetItem(region))
-                    self.resultsTable.setItem(i, 2, qt.QTableWidgetItem(f"{score:.4f}"))
+                    # Updated to show sign explicitly (+/-)
+                    self.resultsTable.setItem(i, 2, qt.QTableWidgetItem(f"{score:+.4f}"))
 
             # Show completion message
             slicer.util.infoDisplay("Analysis and Registration completed successfully!")
@@ -354,7 +403,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             if not os.path.exists(tian_atlas_path): raise FileNotFoundError(f"Tian Atlas not found.")
 
             # ---------------------------------------------------------------
-            # 1. LOAD MNI TEMPLATE & PATIENT ANATOMY
+            # 1. LOAD MNI TEMPLATE AND PATIENT ANATOMY
             # ---------------------------------------------------------------
             # Load MNI (Fixed reference for connectivity, Moving image for registration)
             mni_node = slicer.util.loadVolume(mni_template_path)
@@ -461,6 +510,15 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 z_val = z_scores[400 + label_id - 1]
                 heatmap_data[tian_data == label_id] = z_val
 
+            # Remove previous Z-Score Map nodes (including those from previous runs)
+            # Uses wildcard to catch "Subcortical_Z_Score_Map", "Subcortical_Z_Score_Map_1", etc.
+            try:
+                existing_nodes = slicer.util.getNodes("Subcortical_Z_Score_Map*")
+                for node in existing_nodes.values():
+                    slicer.mrmlScene.RemoveNode(node)
+            except:
+                pass
+
             heatmap_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Subcortical_Z_Score_Map")
             heatmap_node.CreateDefaultDisplayNodes()
             heatmap_node.CopyOrientation(tian_node)
@@ -514,35 +572,60 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 logging.warning("Registration did not complete successfully.")
 
             # ---------------------------------------------------------------
-            # 5. APPLY TRANSFORM AND VISUALIZATION
+            # 5. APPLY TRANSFORM, STYLE HEATMAP AND CREATE VISUALIZATIONS
             # ---------------------------------------------------------------
 
             # Apply transform to Heatmap so it fits the Patient
             heatmap_node.SetAndObserveTransformNodeID(mni_to_anat_transform.GetID())
 
-            # Create Markups for Top 3 (Coordinates are in MNI space, so we must transform them too)
-            markups_node_name = "Top Candidate Targets"
+            # --- STYLE HEATMAP (MOVED UP to calculate range for markup colors) ---
+            disp = heatmap_node.GetDisplayNode()
+            valid_zscores = heatmap_data[~np.isnan(heatmap_data)]
+            z_min, z_max = 0.0, 1.0  # Default
 
-            # --- FIX: Initialize variable before try/except block ---
-            markups_node = None
+            if len(valid_zscores) > 0:
+                z_min, z_max = np.min(valid_zscores), np.max(valid_zscores)
+                disp.SetAutoWindowLevel(0)
+                disp.SetWindowLevel(z_max - z_min, (z_min + z_max) / 2.0)
+                disp.SetThreshold(z_min - 0.1, z_max)
+                disp.SetApplyThreshold(1)
 
+            colorNode = slicer.util.getNode("ColdToHotRainbow") or slicer.util.getNode("Rainbow")
+            if colorNode: disp.SetAndObserveColorNodeID(colorNode.GetID())
+            disp.SetOpacity(0.7)
+
+            # --- UPDATED MARKUP GENERATION (Colors match Heatmap) ---
+
+            # Remove previous candidate nodes if they exist
+            for i in range(1, 4):
+                try:
+                    old_node = slicer.util.getNode(f"DBS_Candidate_{i}")
+                    if old_node:
+                        slicer.mrmlScene.RemoveNode(old_node)
+                except:
+                    pass
+
+            # Also remove legacy node name if it exists
             try:
-                markups_node = slicer.util.getNode(markups_node_name)
+                old_legacy = slicer.util.getNode("Top Candidate Targets")
+                if old_legacy: slicer.mrmlScene.RemoveNode(old_legacy)
             except:
                 pass
 
-            if not markups_node:
-                markups_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", markups_node_name)
-
-            markups_node.RemoveAllControlPoints()
-
-            # Apply the MNI->Anat transform to the markups node
-            markups_node.SetAndObserveTransformNodeID(mni_to_anat_transform.GetID())
-
             count = min(3, len(scored_regions))
+
+            # Store the RAS point of the top candidate for centering later
+            top_candidate_ras = None
 
             for i in range(count):
                 top_name, _, top_z, top_label = scored_regions[i]
+
+                # Create a specific node for this rank
+                node_name = f"DBS_Candidate_{i + 1}"
+                markups_node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", node_name)
+
+                # Apply the MNI->Anat transform to the markups node
+                markups_node.SetAndObserveTransformNodeID(mni_to_anat_transform.GetID())
 
                 region_mask = (tian_data == top_label)
                 if np.any(region_mask):
@@ -556,9 +639,70 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                     ras_homog = ijkToRas.MultiplyPoint([ijk_point[0], ijk_point[1], ijk_point[2], 1.0])
                     ras_point = ras_homog[:3]
 
-                    # Add Point (In MNI space; transform node handles the shift to Patient space)
+                    # Add Point
                     pid = markups_node.AddControlPoint(ras_point[0], ras_point[1], ras_point[2])
-                    markups_node.SetNthControlPointLabel(pid, f"{i + 1}: {top_name}\nZ: {top_z:.2f}")
+                    markups_node.SetNthControlPointLabel(pid, f"#{i + 1}: {top_name}\nZ: {top_z:.2f}")
+
+                    # Capture top candidate location
+                    if i == 0:
+                        # Calculate transformed coordinate for centering
+                        # The point is in MNI space, but we need Patient space for JumpSlice
+                        mniPoint = [ras_point[0], ras_point[1], ras_point[2], 1.0]
+                        transformMatrix = vtk.vtkMatrix4x4()
+                        mni_to_anat_transform.GetMatrixTransformToParent(transformMatrix)
+                        anatPoint = transformMatrix.MultiplyPoint(mniPoint)
+                        top_candidate_ras = anatPoint[:3]
+
+                    # --- STYLE THE NODE ---
+                    display_node = markups_node.GetDisplayNode()
+
+                    # Calculate Color based on Z-Score using the active Color Table
+                    rgb = [1.0, 1.0, 0.0]  # Default Fallback (Yellow)
+                    if colorNode and z_max > z_min:
+                        # Normalize Z score to 0..1 range of the current data distribution
+                        ratio = (top_z - z_min) / (z_max - z_min)
+                        ratio = max(0.0, min(1.0, ratio))  # Clamp
+
+                        if colorNode.GetClassName() == "vtkMRMLProceduralColorNode":
+                            # Procedural nodes (like ColdToHotRainbow) usually map 0..255 internally in Slicer usage
+                            ctf = colorNode.GetColorTransferFunction()
+                            rgb_tuple = ctf.GetColor(ratio * 255.0)
+                            rgb = list(rgb_tuple)
+                        elif colorNode.GetClassName() == "vtkMRMLColorTableNode":
+                            # Discrete tables (like Rainbow) map via index
+                            num_colors = colorNode.GetNumberOfColors()
+                            idx = int(ratio * (num_colors - 1))
+                            rgb_arr = [0.0, 0.0, 0.0, 0.0]  # Fix: Needs 4 elements
+                            colorNode.GetColor(idx, rgb_arr)
+                            rgb = rgb_arr[:3]  # Keep only RGB
+
+                    comp_color = [1.0 - c for c in rgb]  # Selected Color (Complementary)
+
+                    # Set Unselected Color to COMPLEMENTARY
+                    display_node.SetColor(rgb)
+
+                    # Set Selected Color to PRIMARY/HEATMAP COLOR
+                    display_node.SetSelectedColor(comp_color)
+
+                    # Set Active Color to COMPLEMENTARY
+                    display_node.SetActiveColor(rgb)
+
+                    # Glyph Properties
+                    # Set to Sphere3D (enum value usually available in slicer namespace)
+                    try:
+                        display_node.SetGlyphType(slicer.vtkMRMLMarkupsDisplayNode.Sphere3D)
+                    except:
+                        display_node.SetGlyphType(3)  # Fallback to int if enum not found
+
+                    # Size: Absolute 2.5mm
+                    display_node.SetUseGlyphScale(False)
+                    display_node.SetGlyphSize(2.5)
+                    display_node
+
+                    # Occluded Visibility and Opacity
+                    display_node.SetOccludedVisibility(True)
+                    display_node.SetOpacity(0.6)
+
 
             # Set Visualization Layers
             # Background: Patient Anatomy (Real Space)
@@ -574,19 +718,21 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             slicer.app.layoutManager().resetThreeDViews()
             slicer.app.layoutManager().resetSliceViews()
 
-            # Style Heatmap
-            disp = heatmap_node.GetDisplayNode()
-            valid_zscores = heatmap_data[~np.isnan(heatmap_data)]
-            if len(valid_zscores) > 0:
-                z_min, z_max = np.min(valid_zscores), np.max(valid_zscores)
-                disp.SetAutoWindowLevel(0)
-                disp.SetWindowLevel(z_max - z_min, (z_min + z_max) / 2.0)
-                disp.SetThreshold(z_min - 0.1, z_max)
-                disp.SetApplyThreshold(1)
+            # --- 3D View Settings (Black background, No Axis/Box) ---
+            try:
+                viewNode = slicer.app.layoutManager().threeDWidget(0).mrmlViewNode()
+                viewNode.SetBackgroundColor(0, 0, 0)
+                viewNode.SetBackgroundColor2(0, 0, 0)
+                viewNode.SetBoxVisible(0)
+                viewNode.SetAxisLabelsVisible(0)
+            except Exception as e:
+                logging.warning(f"Could not set 3D view properties: {e}")
 
-            colorNode = slicer.util.getNode("ColdToHotRainbow") or slicer.util.getNode("Rainbow")
-            if colorNode: disp.SetAndObserveColorNodeID(colorNode.GetID())
-            disp.SetOpacity(0.7)
+            # --- Jump to top candidate ---
+            if top_candidate_ras is not None:
+                # Center 2D views on the top candidate (Rank 1)
+                for sliceNode in slicer.util.getNodesByClass("vtkMRMLSliceNode"):
+                    sliceNode.JumpSlice(top_candidate_ras[0], top_candidate_ras[1], top_candidate_ras[2])
 
             # Volume Rendering
             volRenLogic = slicer.modules.volumerendering.logic()
@@ -718,7 +864,7 @@ class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
             widget.patientSelector.currentPath = patient_data_folder
             widget.anatSelector.currentPath = patient_anat_file
 
-            self.delayDisplay("Simulating 'Calculate & Register' click...")
+            self.delayDisplay("Simulating 'Calculate and Register' click...")
             widget.onApplyButton()
 
             self.delayDisplay("Test Passed! Z-Scores calculated and Registration performed.")
