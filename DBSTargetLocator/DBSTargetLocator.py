@@ -369,63 +369,24 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
 
         return roi_names
 
-    def loadPatientData(self, patient_folder_path, patient_anat_path):
-        """
-        Loads the T1 scan into Slicer and verifies fMRI files exist.
-        """
-        logging.info("Loading Patient Data...")
-
-        # 1. Verify and Load Anatomy
-        if not os.path.exists(patient_anat_path):
-            raise FileNotFoundError(f"Anatomical file not found: {patient_anat_path}")
-
-        # Load Volume
-        try:
-            # Check if already loaded to avoid duplicates
-            existing_node = None
-            for node in slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode"):
-                if node.GetName() == "Patient_Anatomy_T1":
-                    existing_node = node
-                    break
-
-            if not existing_node:
-                patient_anat_node = slicer.util.loadVolume(patient_anat_path)
-                patient_anat_node.SetName("Patient_Anatomy_T1")
-                logging.info(f"Loaded T1 Volume: {patient_anat_node.GetName()}")
-            else:
-                logging.info("T1 Volume already loaded.")
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to load T1 volume: {e}")
-
-        # 2. Verify fMRI Folder content
-        if not os.path.exists(patient_folder_path):
-            raise FileNotFoundError(f"fMRI folder not found: {patient_folder_path}")
-
-        # Scan for .h5 files
-        patient_files = [f for f in os.listdir(patient_folder_path) if f.endswith('.h5') and ('rest' in f)]
-
-        if not patient_files:
-            raise ValueError(
-                f"No resting state .h5 files found in {patient_folder_path}.\n\n"
-                "Tip: Ensure you selected the specific subject folder (e.g., 'NDAR_INVBL062HTE'), "
-                "not the parent directory."
-            )
-
-        logging.info(f"Found {len(patient_files)} valid fMRI files.")
-        return True
-
     def analyzeFMRI(self, patient_folder_path, patient_anat_path):
         """
         Perform fMRI analysis to identify candidate DBS target locations, then register to anatomical MRI.
+        Returns list of (RegionName, ZScore) tuples for top 3 candidates.
+
+        Accepts a folder path, scans for .h5 files, and averages them if multiple are found.
         """
+
         logging.info("Starting fMRI analysis and Registration...")
+        logging.info(f"Patient fMRI Folder: {patient_folder_path}")
+        logging.info(f"Patient Anat File: {patient_anat_path}")
 
         import pandas as pd
         import numpy as np
         import h5py
 
         slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
+
         top_candidates = []
 
         try:
@@ -442,16 +403,15 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             if not os.path.exists(tian_atlas_path): raise FileNotFoundError(f"Tian Atlas not found.")
 
             # ---------------------------------------------------------------
-            # 1. LOAD MNI TEMPLATE & PATIENT ANATOMY
+            # 1. LOAD MNI TEMPLATE AND PATIENT ANATOMY
             # ---------------------------------------------------------------
             # Load MNI (Fixed reference for connectivity, Moving image for registration)
             mni_node = slicer.util.loadVolume(mni_template_path)
             mni_node.SetName("Standard_MNI_Template")
 
             # Load Patient Anatomy (Fixed image for registration)
-            # Use loadPatientData logic to ensure it's loaded or reused
-            self.loadPatientData(patient_folder_path, patient_anat_path)
-            patient_anat_node = slicer.util.getNode("Patient_Anatomy_T1")
+            patient_anat_node = slicer.util.loadVolume(patient_anat_path)
+            patient_anat_node.SetName("Patient_Anatomy_T1")
 
             # Load Tian Atlas (Hidden, MNI space)
             tian_node = slicer.util.loadLabelVolume(tian_atlas_path)
@@ -473,28 +433,17 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             if not patient_files:
                 raise ValueError(f"No resting state .h5 files found in {patient_folder_path}")
 
-            # --- FIXED LOGIC START: Average Matrix First, then Metric ---
-            # Collect raw correlation matrices instead of pre-computed absolute metrics
-            patient_fc_matrices = []
-
+            patient_metrics = []
             for p_file in patient_files:
                 try:
-                    # Helper function to get raw FC matrix (not absolute yet)
-                    fc_matrix = self._get_raw_fc_matrix(p_file, pd, h5py)
-                    patient_fc_matrices.append(fc_matrix)
+                    metric = self._compute_single_file_metric(p_file, pd, h5py, np)
+                    patient_metrics.append(metric)
                 except Exception as e:
                     logging.warning(f"Failed to load patient file {p_file}: {e}")
 
-            if not patient_fc_matrices:
-                raise ValueError("Failed to compute metrics for any patient files.")
+            if not patient_metrics: raise ValueError("Failed to compute metrics.")
 
-            # 1. Average the raw correlation matrices (this cancels out noise if AP/PA pairs exist)
-            avg_patient_fc = np.mean(np.array(patient_fc_matrices), axis=0)
-
-            # 2. Compute strength metric from the averaged matrix (Triangle Inequality fix)
-            # Connectivity Strength = Mean of Absolute Correlations
-            patient_metric = np.mean(np.abs(avg_patient_fc), axis=1)
-            # --- FIXED LOGIC END ---
+            patient_metric = np.mean(np.array(patient_metrics), axis=0)
 
             # Baseline Logic
             distr_file = os.path.join(control_dir, 'baseline_dist.npy')
@@ -528,6 +477,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                     if parent_folder in processed_subjects: continue
 
                     try:
+                        # Use the auto-merge helper for controls to keep logic simple there
                         c_metric = self._load_and_compute_metric_auto_merge(c_path, pd, h5py, np)
                         control_metrics.append(c_metric)
                         processed_subjects.add(parent_folder)
@@ -537,9 +487,6 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                 control_metrics = np.array(control_metrics)
                 ctrl_mean = np.mean(control_metrics, axis=0)
                 ctrl_std = np.std(control_metrics, axis=0)
-
-                # SAVE DISTRIBUTION
-                np.save(distr_file, control_metrics)
                 np.save(baseline_file, {'mean': ctrl_mean, 'std': ctrl_std})
                 logging.info(f"Generated baseline from {len(control_metrics)} controls.")
 
@@ -551,9 +498,14 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
             # ---------------------------------------------------------------
             # 3. CREATE SUBCORTICAL HEATMAP (MNI SPACE)
             # ---------------------------------------------------------------
+            # We only care about indices 400-431 (The 32 Subcortical Regions)
             subcortex_z_scores = z_scores[400:432]
+
+            # Create Heatmap Array
+            # MODIFICATION: Initialize with NaN (transparent) instead of 0.
             heatmap_data = np.full_like(tian_data, np.nan, dtype=np.float32)
 
+            # Fill Heatmap
             for label_id in range(1, 33):
                 z_val = z_scores[400 + label_id - 1]
                 heatmap_data[tian_data == label_id] = z_val
@@ -751,6 +703,7 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                     display_node.SetOccludedVisibility(True)
                     display_node.SetOpacity(0.6)
 
+
             # Set Visualization Layers
             # Background: Patient Anatomy (Real Space)
             # Foreground: Heatmap (MNI Space + Transform)
@@ -795,28 +748,12 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         finally:
             slicer.app.restoreOverrideCursor()
 
-    def _get_raw_fc_matrix(self, path, pd, h5py):
-        """
-        Helper to return the raw correlation matrix (before absolute value).
-        Used for the new patient logic.
-        """
-
-        def get_data(p):
-            try:
-                df = pd.read_hdf(p)
-                return df.values
-            except:
-                with h5py.File(p, 'r') as f:
-                    key = list(f.keys())[0]
-                    return f[key][:]
-
-        data = get_data(path)
-        if data.shape[0] == 434: data = data.T
-        fc = pd.DataFrame(data).corr().values
-        return fc
-
     def _compute_single_file_metric(self, path, pd, h5py, np):
-        # Legacy: Kept if needed, but analyzeFMRI now uses _get_raw_fc_matrix
+        """
+        Computes Global Connectivity Strength for a single file.
+        No averaging logic.
+        """
+
         def get_data(p):
             try:
                 df = pd.read_hdf(p)
@@ -832,6 +769,10 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
         return np.mean(np.abs(fc), axis=1)
 
     def _load_and_compute_metric_auto_merge(self, h5_path, pd, h5py, np):
+        """
+        Looks for matching AP/PA file and averages connectivity.
+        """
+
         def get_data(path):
             try:
                 df = pd.read_hdf(path)
@@ -841,10 +782,12 @@ class DBSTargetLocatorLogic(ScriptedLoadableModuleLogic, VTKObservationMixin):
                     key = list(f.keys())[0]
                     return f[key][:]
 
+        # Load Primary File
         data1 = get_data(h5_path)
         if data1.shape[0] == 434: data1 = data1.T
         fc1 = pd.DataFrame(data1).corr().values
 
+        # Look for Partner File (AP <-> PA)
         folder, filename = os.path.split(h5_path)
         if 'restAP' in filename:
             partner_name = filename.replace('restAP', 'restPA')
@@ -890,12 +833,15 @@ class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
     def test_DBSTargetLocator_LocalSample(self):
         """
         Tests the module using the local sample folder in Resources/SamplePatientH5.
+        This tests the Logic AND updates the GUI table.
         """
         self.delayDisplay("Starting local sample test")
 
+        # 1. Locate the sample data in Resources
         moduleDir = os.path.dirname(__file__)
         patient_data_folder = os.path.join(moduleDir, 'Resources', 'SamplePatientH5', 'NDAR_INVAP729WCD')
 
+        # Define the Sample Anatomical File Path
         patient_anat_file = os.path.join(moduleDir, 'Resources', 'SamplePatientH5',
                                          'sub-NDARINVAP729WCD_run-01_T1w.nii.gz')
 
@@ -908,7 +854,10 @@ class DBSTargetLocatorTest(ScriptedLoadableModuleTest):
             return
 
         try:
+            # Switch to the module in the UI
             slicer.util.selectModule('DBSTargetLocator')
+
+            # Get the Python Widget object
             widget = slicer.modules.dbstargetlocator.widgetRepresentation().self()
 
             # Set inputs in the GUI
