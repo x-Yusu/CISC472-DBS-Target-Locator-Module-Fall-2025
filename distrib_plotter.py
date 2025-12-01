@@ -37,7 +37,8 @@ def generate_report(csv_path, pdf_path):
     print(f"Found {len(df)} patients and {len(region_cols)} regions.")
     print("-" * 40)
     print("Generating statistical summary...")
-    print(df[region_cols].describe().transpose())  # Print stats to console
+    stats_df = df[region_cols].describe().transpose()  # Calculate stats once
+    print(stats_df)  # Print stats to console
     print("-" * 40)
 
     print(f"Creating distribution plots in {pdf_path}...")
@@ -48,21 +49,52 @@ def generate_report(csv_path, pdf_path):
     with PdfPages(pdf_path) as pdf:
         # Create a plot for each region
         for region in region_cols:
-            plt.figure(figsize=(10, 6))
+            # Create figure with extra width for stats text
+            plt.figure(figsize=(12, 6))
+
+            # Create a grid for layout: Left=Plot, Right=Text
+            gs = plt.GridSpec(1, 2, width_ratios=[3, 1])
+
+            # --- PLOT AREA (Left) ---
+            ax_plot = plt.subplot(gs[0])
 
             # Histogram with KDE
-            # We use a fixed range if possible, or let it auto-scale
-            sns.histplot(df[region], kde=True, bins=15, color='skyblue', edgecolor='black')
+            sns.histplot(df[region], kde=True, bins=15, color='skyblue', edgecolor='black', ax=ax_plot)
 
             # Add reference lines for standard Z-score thresholds
-            plt.axvline(x=-1.96, color='r', linestyle='--', label='Significance (p=0.05)')
-            plt.axvline(x=1.96, color='r', linestyle='--')
-            plt.axvline(x=0, color='k', linestyle='-', linewidth=1, label='Mean')
+            ax_plot.axvline(x=-1.96, color='r', linestyle='--', label='Significance (p=0.05)')
+            ax_plot.axvline(x=1.96, color='r', linestyle='--')
+            ax_plot.axvline(x=0, color='k', linestyle='-', linewidth=1, label='Mean')
 
-            plt.title(f"Z-Score Distribution: {region}", fontsize=14)
-            plt.xlabel("Z-Score (Deviation from Healthy Control Baseline)", fontsize=12)
-            plt.ylabel("Count (Number of Patients)", fontsize=12)
-            plt.legend()
+            ax_plot.set_title(f"Z-Score Distribution: {region}", fontsize=14)
+            ax_plot.set_xlabel("Z-Score (Deviation from Healthy Control Baseline)", fontsize=12)
+            ax_plot.set_ylabel("Count (Number of Patients)", fontsize=12)
+            ax_plot.legend()
+
+            # --- STATS TEXT AREA (Right) ---
+            ax_text = plt.subplot(gs[1])
+            ax_text.axis('off')  # Hide axes for text area
+
+            # Get stats for this region
+            r_stats = stats_df.loc[region]
+
+            stats_text = (
+                f"Statistical Summary\n"
+                f"-------------------\n\n"
+                f"Count: {int(r_stats['count'])}\n\n"
+                f"Mean:  {r_stats['mean']:.4f}\n"
+                f"Std:   {r_stats['std']:.4f}\n\n"
+                f"Min:   {r_stats['min']:.4f}\n"
+                f"25%:   {r_stats['25%']:.4f}\n"
+                f"50%:   {r_stats['50%']:.4f}\n"
+                f"75%:   {r_stats['75%']:.4f}\n"
+                f"Max:   {r_stats['max']:.4f}"
+            )
+
+            # Place text in the center of the right panel
+            ax_text.text(0.1, 0.5, stats_text, fontsize=11, family='monospace',
+                         verticalalignment='center', transform=ax_text.transAxes,
+                         bbox=dict(boxstyle="round,pad=0.5", fc="white", ec="gray", alpha=0.9))
 
             # Adjust layout and save to PDF page
             plt.tight_layout()
